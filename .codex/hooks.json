@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh \"$(git rev-parse --show-toplevel)/.codex/hooks/lint-on-stop.sh\"",
+            "timeout": 30,
+            "statusMessage": "ruff check 実行中..."
+          }
+        ]
+      }
+    ]
+  }
+}
