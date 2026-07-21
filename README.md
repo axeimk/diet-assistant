@@ -15,9 +15,22 @@ SQLiteを正本に、食事・運動・体重・目標を長期間記録し、AI
                                               └─> Markdownレポート (reports/)
 ```
 
-## セットアップ（初回だけ）
+## 前提
 
-Python 3.14以降が必要です。
+必須:
+
+- **Python 3.14以上**
+- **Claude Code または Codex**
+- **macOS または Linux**
+
+任意:
+
+- **uv**（推奨）。標準の`venv`＋`pip`でも構いません。
+- **iCloud Drive と iPhoneのショートカットApp**。[iPhoneから記録する](#iphoneから記録する)場合だけ必要です。
+
+実行時の外部パッケージ依存はありません。DBはPython標準の`sqlite3`を使い、ネットワーク接続も不要です（エージェント自体の通信を除く）。開発用の`pytest`・`ruff`・`basedpyright`は`.[dev]`でまとめて入ります。
+
+## セットアップ（初回だけ）
 
 ```bash
 uv venv --python 3.14
@@ -176,19 +189,19 @@ DB、画像、プロフィール、バックアップ、生成レポート、環
 
 すべてのコマンドはJSONを標準出力へ返します。エラーはJSONを標準エラーへ返し、終了コード2になります。データルートを変える場合は先頭に`--root /path/to/root`を付けます（動作確認は必ず一時ディレクトリを指定し、本番の`data/diet.db`を触らないこと）。
 
-| サブコマンド | 操作 |
-| --- | --- |
-| `init` / `doctor` | DB初期化・マイグレーション適用 / 状態確認 |
-| `profile` | `show` `validate` |
-| `meal` | `add` `list` `show` `update` `delete` |
-| `exercise` | `add` `list` `show` `update` `delete` |
-| `metric` | `add` `list` `show` `update` `delete` |
-| `goal` | `add` `list` `show` `activate` `recalculate` `update` `delete` |
-| `inbox` | `import` `list` `retry` |
-| `report` | `daily` `weekly`（`--date` `--format json`） |
-| `advice` | `today` `weekly`（`--date`） |
-| `backup` | `create` `list` |
-| `photo` | `cleanup`（`--days` `--apply`） |
+| サブコマンド      | 操作                                                           |
+| ----------------- | -------------------------------------------------------------- |
+| `init` / `doctor` | DB初期化・マイグレーション適用 / 状態確認                      |
+| `profile`         | `show` `validate`                                              |
+| `meal`            | `add` `list` `show` `update` `delete`                          |
+| `exercise`        | `add` `list` `show` `update` `delete`                          |
+| `metric`          | `add` `list` `show` `update` `delete`                          |
+| `goal`            | `add` `list` `show` `activate` `recalculate` `update` `delete` |
+| `inbox`           | `import` `list` `retry`                                        |
+| `report`          | `daily` `weekly`（`--date` `--format json`）                   |
+| `advice`          | `today` `weekly`（`--date`）                                   |
+| `backup`          | `create` `list`                                                |
+| `photo`           | `cleanup`（`--days` `--apply`）                                |
 
 記録の登録・更新は`--json <file>`で構造化データを渡せます。更新JSONには変更する列だけを書きます。削除は`--yes`が必要です。
 
