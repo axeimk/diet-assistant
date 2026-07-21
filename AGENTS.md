@@ -4,6 +4,7 @@ SQLiteを正本に食事・運動・体重・目標を長期記録し、CLIとAI
 
 ## コマンド
 
+- 既存の`.venv`がある場合、作業開始時から仮想環境内のコマンドを使う。シェル間で`source`の状態が引き継がれない場合は、最初から`.venv/bin/diet`、`.venv/bin/pytest`などを直接実行し、システムのPATH上のコマンドを先に試さない。
 - セットアップ: `uv venv --python 3.14 && source .venv/bin/activate && uv pip install -e '.[dev]'`
 - テスト: `pytest`
 - lint: `ruff check .`
