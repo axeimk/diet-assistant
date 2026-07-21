@@ -138,7 +138,7 @@ def daily_summary(path: Path, day: date) -> DailySummary:
             "exercise_minutes": round(sum(row["duration_minutes"] or 0 for row in exercises), 1),
         },
         "target_daily_calories": target,
-        "difference_from_target": round(calories - target, 1) if target else None,
+        "difference_from_target": round(calories - target, 1) if target and meals else None,
         "uncertain_meal_ids": [m["id"] for m in meals if m["estimation_confidence"] == "low"],
     }
 
@@ -198,17 +198,55 @@ def _difference(current: float | None, previous: float | None) -> float | None:
     return round(current - previous, 2) if current is not None and previous is not None else None
 
 
-def daily_markdown(summary: DailySummary) -> str:
+def daily_markdown(
+    summary: DailySummary,
+    advice: dict[str, object] | None = None,
+    goal_evaluation: dict[str, object] | None = None,
+) -> str:
     totals = summary["totals"]
     weight = summary["metric"]["weight"] if summary["metric"] else "記録なし"
     difference = summary["difference_from_target"]
-    difference_text = difference if difference is not None else "目標未設定"
+    difference_text: float | str
+    if difference is not None:
+        difference_text = difference
+    elif not summary["meals"]:
+        difference_text = "食事記録なし"
+    else:
+        difference_text = "目標未設定"
     meal_lines = [
         f"- {m['eaten_at'][11:16]} {m['meal_type']}: {m['note'] or '（メモなし）'} "
         + f"({m['estimated_calories'] if m['estimated_calories'] is not None else '?'} kcal)"
         for m in summary["meals"]
     ] or ["- 記録なし"]
-    advice = "通常どおり記録を続け、単日の値ではなく7日以上の傾向で判断しましょう。"
+    advice_text = (
+        require_str(advice, "situation")
+        + " "
+        + require_str(advice, "priority_action")
+        if advice
+        else "通常どおり記録を続け、単日の値ではなく7日以上の傾向で判断しましょう。"
+    )
+    outcome_labels = {
+        "insufficient_data": "データ不足",
+        "challenge_achieved": "挑戦目標達成",
+        "success_threshold_achieved": "達成最低ライン達成",
+        "not_achieved": "未達",
+    }
+    outcome = goal_evaluation.get("outcome") if goal_evaluation else None
+    outcome_label = outcome_labels.get(str(outcome), str(outcome))
+    evaluation_lines = (
+        [
+            "",
+            "## 目標の達成判定",
+            f"- 判定: {outcome_label}",
+            f"- 評価期間: {goal_evaluation['period_start']}〜{goal_evaluation['period_end']}",
+            f"- 体重平均: {goal_evaluation['average_weight']} kg",
+            f"- 測定数: {goal_evaluation['weight_measurements']}/"
+            + f"{goal_evaluation['evaluation_window_days']}日",
+            f"- 最終判定: {'はい' if goal_evaluation['is_final'] else 'いいえ（途中経過）'}",
+        ]
+        if goal_evaluation
+        else []
+    )
     return "\n".join(
         [
             f"# 日次レポート {summary['date']}",
@@ -227,7 +265,8 @@ def daily_markdown(summary: DailySummary) -> str:
             f"- 目標との差: {difference_text}",
             "",
             "## 短い助言",
-            advice,
+            advice_text,
+            *evaluation_lines,
             "",
             "## 不確実性の高い記録",
             f"- 食事ID: {summary['uncertain_meal_ids'] or 'なし'}",

@@ -11,7 +11,12 @@ from diet_assistant.db import SCHEMA_VERSION, connect, initialize, migrate, sche
 from diet_assistant.repository import add_meal, get, insert
 from diet_assistant.services.intake import import_file
 from diet_assistant.services.maintenance import cleanup_candidates, create_backup
-from diet_assistant.services.planning import calculate_plan, save_plan
+from diet_assistant.services.planning import (
+    calculate_energy_targets,
+    calculate_plan,
+    evaluate_goal,
+    save_plan,
+)
 from diet_assistant.services.reporting import daily_summary, period_summary, weekly_summary
 from diet_assistant.util import now_iso, require_str
 
@@ -116,6 +121,16 @@ def _initialize_v1(path: Path) -> None:
         _ = connection.executescript(
             "CREATE TABLE meals (id INTEGER PRIMARY KEY, eaten_at TEXT, protein REAL);"
             + "CREATE TABLE meal_items (id INTEGER PRIMARY KEY, meal_id INTEGER, name TEXT);"
+            + "CREATE TABLE goals (id INTEGER PRIMARY KEY, started_at TEXT NOT NULL, "
+            + "target_date TEXT NOT NULL, start_weight REAL NOT NULL, target_weight REAL NOT NULL, "
+            + "target_type TEXT NOT NULL, status TEXT NOT NULL, note TEXT, "
+            + "created_at TEXT NOT NULL);"
+            + "CREATE TABLE plans (id INTEGER PRIMARY KEY, goal_id INTEGER NOT NULL, "
+            + "calculated_at TEXT NOT NULL, target_daily_calories INTEGER, "
+            + "target_calorie_range_min INTEGER, target_calorie_range_max INTEGER, "
+            + "target_weekly_exercise_minutes INTEGER, target_weekly_weight_change REAL NOT NULL, "
+            + "protein_target REAL, step_target INTEGER, assumptions TEXT NOT NULL, "
+            + "weekly_actions TEXT NOT NULL, safety_note TEXT, status TEXT NOT NULL);"
             + "INSERT INTO meals (eaten_at, protein) VALUES ('2026-07-20T12:00:00+09:00', 10);"
         )
         _ = connection.execute("PRAGMA user_version = 1")
@@ -128,7 +143,7 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
 
     applied = migrate(path)
 
-    assert applied == [2]
+    assert applied == [2, 3]
     assert schema_version(path) == SCHEMA_VERSION
     with connect(path) as connection:
         row = tuple(
@@ -143,6 +158,14 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
         }
     assert row == (10, None), "既存の行は保持され、sodiumはNULLで埋まる"
     assert "sodium" in item_columns
+    with connect(path) as connection:
+        goal_columns = {
+            cast(tuple[int, str], info)[1]
+            for info in cast(
+                list[tuple[object, ...]], connection.execute("PRAGMA table_info(goals)").fetchall()
+            )
+        }
+    assert {"success_threshold_weight", "evaluation_window_days"} <= goal_columns
 
 
 def test_migration_is_not_reapplied(tmp_path: Path) -> None:
@@ -157,7 +180,7 @@ def test_initialize_migrates_existing_db(tmp_path: Path) -> None:
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
 
-    assert initialize(path) == [2]
+    assert initialize(path) == [2, 3]
     assert schema_version(path) == SCHEMA_VERSION
 
 
@@ -197,6 +220,64 @@ def test_goal_pace_and_plan_history(db_path: Path) -> None:
         statuses = [row[0] for row in status_rows]
     assert first["plan_id"] != second["plan_id"]
     assert statuses == ["superseded", "active"]
+
+
+def test_energy_targets_from_profile_are_capped() -> None:
+    energy = calculate_energy_targets(
+        {
+            "height_cm": 175,
+            "birth_date": "1991-03-04",
+            "sex": "male",
+            "activity_level": "sedentary",
+        },
+        weight=91,
+        theoretical_daily_deficit=994,
+        on_date=date(2026, 7, 21),
+        days_remaining=31,
+    )
+    assert energy["estimated_maintenance_calories"] == 2200
+    assert energy["planned_daily_deficit"] == 550
+    assert energy["target_daily_calories"] == 1650
+    assert energy["deficit_was_capped"] is True
+    assert energy["calorie_plan_supports_theoretical_pace"] is False
+    assert energy["projected_weight_at_target_date"] == 88.79
+
+
+def test_goal_evaluation_uses_seven_day_average(db_path: Path) -> None:
+    goal_id = insert(
+        db_path,
+        "goals",
+        {
+            "started_at": "2026-07-21",
+            "target_date": "2026-08-21",
+            "start_weight": 91,
+            "target_weight": 87,
+            "success_threshold_weight": 88,
+            "evaluation_window_days": 7,
+            "target_type": "weight_loss",
+            "status": "inactive",
+            "note": None,
+            "created_at": now_iso(),
+        },
+    )
+    for index, weight in enumerate((87.5, 87.8, 87.9, 87.8)):
+        _ = insert(
+            db_path,
+            "body_metrics",
+            {
+                "measured_at": f"2026-08-{18 + index:02d}T07:00:00+09:00",
+                "weight": weight,
+                "body_fat_percentage": None,
+                "waist": None,
+                "note": None,
+                "created_at": now_iso(),
+            },
+        )
+    evaluation = evaluate_goal(db_path, goal_id, evaluation_date=date(2026, 8, 21))
+    assert evaluation["average_weight"] == 87.75
+    assert evaluation["challenge_achieved"] is False
+    assert evaluation["success_threshold_achieved"] is True
+    assert evaluation["outcome"] == "success_threshold_achieved"
 
 
 def test_daily_and_moving_averages(db_path: Path) -> None:

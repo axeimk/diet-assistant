@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -73,6 +73,13 @@ MIGRATIONS: dict[int, str] = {
 ALTER TABLE meals ADD COLUMN sodium REAL CHECK(sodium >= 0);
 ALTER TABLE meal_items ADD COLUMN sodium REAL CHECK(sodium >= 0);
 """,
+    3: """
+ALTER TABLE goals ADD COLUMN success_threshold_weight REAL CHECK(success_threshold_weight > 0);
+ALTER TABLE goals ADD COLUMN evaluation_window_days INTEGER NOT NULL DEFAULT 1
+    CHECK(evaluation_window_days BETWEEN 1 AND 28);
+ALTER TABLE plans ADD COLUMN estimated_maintenance_calories INTEGER;
+ALTER TABLE plans ADD COLUMN planned_daily_deficit INTEGER;
+""",
 }
 
 
@@ -83,6 +90,9 @@ CREATE TABLE IF NOT EXISTS goals (
     target_date TEXT NOT NULL,
     start_weight REAL NOT NULL CHECK(start_weight > 0),
     target_weight REAL NOT NULL CHECK(target_weight > 0),
+    success_threshold_weight REAL CHECK(success_threshold_weight > 0),
+    evaluation_window_days INTEGER NOT NULL DEFAULT 1
+        CHECK(evaluation_window_days BETWEEN 1 AND 28),
     target_type TEXT NOT NULL DEFAULT 'weight_loss',
     status TEXT NOT NULL DEFAULT 'inactive'
         CHECK(status IN ('active','inactive','completed','cancelled')),
@@ -98,6 +108,8 @@ CREATE TABLE IF NOT EXISTS plans (
     target_daily_calories INTEGER,
     target_calorie_range_min INTEGER,
     target_calorie_range_max INTEGER,
+    estimated_maintenance_calories INTEGER,
+    planned_daily_deficit INTEGER,
     target_weekly_exercise_minutes INTEGER,
     target_weekly_weight_change REAL NOT NULL,
     protein_target REAL,

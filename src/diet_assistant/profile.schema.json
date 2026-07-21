@@ -13,22 +13,22 @@
       "type": "number",
       "minimum": 100,
       "maximum": 250,
-      "description": "身長（cm）。現在は助言の文脈として使い、計算には使わない。"
+      "description": "身長（cm）。暫定維持カロリーの計算に使う。"
     },
     "birth_date": {
       "type": "string",
       "format": "date",
-      "description": "生年月日（YYYY-MM-DD）。現在は助言の文脈として使う。"
+      "description": "生年月日（YYYY-MM-DD）。暫定維持カロリーの計算に使う。"
     },
     "sex": {
       "type": "string",
       "enum": ["female", "male", "unspecified"],
-      "description": "現在は助言の文脈として使う。"
+      "description": "暫定維持カロリーの計算に使う。unspecifiedの場合は計算しない。"
     },
     "activity_level": {
       "type": "string",
       "enum": ["sedentary", "light", "moderate", "active", "very_active"],
-      "description": "日常の活動量。現在は助言の文脈として使う。"
+      "description": "日常の活動量。暫定維持カロリーの活動係数に使う。"
     },
     "timezone": {
       "type": "string",

@@ -2,20 +2,17 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
 from ..db import connect
 from ..repository import insert
 from ..util import now_iso, optional_number, require_int, require_str
-from .reporting import period_summary
+from .reporting import daily_summary, period_summary
 
 
-def generate_advice(
-    path: Path, end_day: date, days: int = 7, *, save: bool = True
-) -> dict[str, object]:
-    summary = period_summary(path, end_day, days)
+def _active_plan(path: Path) -> dict[str, object]:
     with connect(path) as connection:
         plan = cast(
             sqlite3.Row | None,
@@ -24,7 +21,120 @@ def generate_advice(
                 + "WHERE p.status='active' AND g.status='active' ORDER BY p.id DESC LIMIT 1"
             ).fetchone(),
         )
-    plan_record = cast(dict[str, object], dict(plan)) if plan else {}
+    return cast(dict[str, object], dict(plan)) if plan else {}
+
+
+def generate_daily_advice(path: Path, day: date, *, save: bool = True) -> dict[str, object]:
+    summary = daily_summary(path, day)
+    plan = _active_plan(path)
+    target = optional_number(plan, "target_daily_calories")
+    target_min = optional_number(plan, "target_calorie_range_min")
+    target_max = optional_number(plan, "target_calorie_range_max")
+    consumed = summary["totals"]["estimated_calories"]
+    if not summary["meals"]:
+        situation = "食事記録がないため、今日の摂取状況は判断できません。"
+        priority = "食べた内容とおおよその量を記録する"
+        remaining = None
+    elif target is None or target_min is None or target_max is None:
+        situation = "プロフィールから摂取目標を計算できていません。"
+        priority = "プロフィールの身長・生年月日・性別・活動量を確認する"
+        remaining = None
+    else:
+        remaining = round(target - consumed)
+        if consumed > target_max:
+            situation = f"今日は摂取目標上限を約{round(consumed - target_max)} kcal上回っています。"
+            priority = "翌日に極端な制限をせず、7日平均で調整する"
+        elif consumed < target_min:
+            situation = f"今日は目標範囲まであと約{round(target_min - consumed)} kcalです。"
+            priority = "空腹と体調に合わせ、たんぱく質や野菜を含む食事を選ぶ"
+        else:
+            situation = "今日は摂取目標の範囲内です。"
+            priority = "現在の食事パターンを継続する"
+    result: dict[str, object] = {
+        "situation": situation,
+        "priority_action": priority,
+        "keep": "単日の増減で極端に調整せず、7日以上の傾向で判断すること",
+        "evidence": {
+            "date": day.isoformat(),
+            "consumed_calories": consumed,
+            "target_daily_calories": target,
+            "target_calorie_range_min": target_min,
+            "target_calorie_range_max": target_max,
+            "remaining_calories": remaining,
+        },
+    }
+    if save:
+        _save_advice(path, "daily", day, day, result)
+    return result
+
+
+def generate_meal_advice(
+    path: Path,
+    meal: dict[str, object],
+    profile: dict[str, object],
+    *,
+    save: bool = True,
+) -> dict[str, object]:
+    eaten_at = datetime.fromisoformat(require_str(meal, "eaten_at"))
+    day = eaten_at.date()
+    summary = daily_summary(path, day)
+    plan = _active_plan(path)
+    target = optional_number(plan, "target_daily_calories")
+    target_min = optional_number(plan, "target_calorie_range_min")
+    target_max = optional_number(plan, "target_calorie_range_max")
+    consumed = summary["totals"]["estimated_calories"]
+    meals_per_day_value = profile.get("meals_per_day", 3)
+    meals_per_day = meals_per_day_value if isinstance(meals_per_day_value, int) else 3
+    remaining_meals = max(meals_per_day - len(summary["meals"]), 0)
+    if target is None or target_min is None or target_max is None:
+        situation = "摂取目標が未計算のため、残りカロリーは算出できません。"
+        priority = "食事内容を記録し、プロフィールを確認する"
+        remaining = None
+        next_meal_budget = None
+    else:
+        remaining = round(target - consumed)
+        next_meal_budget = round(max(remaining, 0) / remaining_meals) if remaining_meals else None
+        if consumed > target_max:
+            excess = round(consumed - target_max)
+            situation = f"今日の摂取量は目標上限を約{excess} kcal超えています。"
+            priority = "次の食事を抜かず、空腹に応じて軽めにし、翌日へ極端に繰り越さない"
+        elif remaining_meals:
+            situation = f"今日の目安は残り約{max(remaining, 0)} kcalです。"
+            priority = (
+                f"残り{remaining_meals}食を1食あたり約{next_meal_budget} kcalの目安で配分する"
+            )
+        else:
+            situation = (
+                "今日の摂取目標の範囲内です。"
+                if target_min <= consumed <= target_max
+                else f"目標中心値との差は{abs(remaining)} kcalです。"
+            )
+            priority = "単日の差は翌日に極端な制限で相殺せず、7日平均で確認する"
+    result: dict[str, object] = {
+        "meal_id": require_int(meal, "id"),
+        "situation": situation,
+        "priority_action": priority,
+        "evidence": {
+            "date": day.isoformat(),
+            "consumed_calories": consumed,
+            "target_daily_calories": target,
+            "target_calorie_range_min": target_min,
+            "target_calorie_range_max": target_max,
+            "remaining_calories": remaining,
+            "remaining_meals": remaining_meals,
+            "suggested_calories_per_remaining_meal": next_meal_budget,
+        },
+    }
+    if save:
+        _save_advice(path, "after_meal", day, day, result)
+    return result
+
+
+def generate_advice(
+    path: Path, end_day: date, days: int = 7, *, save: bool = True
+) -> dict[str, object]:
+    summary = period_summary(path, end_day, days)
+    plan_record = _active_plan(path)
     target = optional_number(plan_record, "target_daily_calories")
     average = optional_number(summary, "average_calories")
     recorded_meal_days = require_int(summary, "recorded_meal_days")
@@ -60,19 +170,35 @@ def generate_advice(
         "plan_change": plan_change,
     }
     if save:
-        _ = insert(
+        _save_advice(
             path,
-            "advice_history",
-            {
-                "generated_at": now_iso(),
-                "advice_type": f"{days}day",
-                "period_start": require_str(summary, "period_start"),
-                "period_end": require_str(summary, "period_end"),
-                "summary": situation,
-                "details": json.dumps(result, ensure_ascii=False),
-                "evidence": json.dumps(result["evidence"], ensure_ascii=False),
-                "priority": "normal",
-                "status": "active",
-            },
+            f"{days}day",
+            date.fromisoformat(require_str(summary, "period_start")),
+            date.fromisoformat(require_str(summary, "period_end")),
+            result,
         )
     return result
+
+
+def _save_advice(
+    path: Path,
+    advice_type: str,
+    period_start: date,
+    period_end: date,
+    result: dict[str, object],
+) -> None:
+    _ = insert(
+        path,
+        "advice_history",
+        {
+            "generated_at": now_iso(),
+            "advice_type": advice_type,
+            "period_start": period_start.isoformat(),
+            "period_end": period_end.isoformat(),
+            "summary": require_str(result, "situation"),
+            "details": json.dumps(result, ensure_ascii=False),
+            "evidence": json.dumps(result["evidence"], ensure_ascii=False),
+            "priority": "normal",
+            "status": "active",
+        },
+    )

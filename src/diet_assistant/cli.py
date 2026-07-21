@@ -21,12 +21,21 @@ from .repository import (
     list_rows,
     update,
 )
-from .services.advice import generate_advice
+from .services.advice import generate_advice, generate_daily_advice, generate_meal_advice
 from .services.intake import import_directory, process_entry
 from .services.maintenance import cleanup_candidates, cleanup_photos, create_backup
-from .services.planning import save_plan
+from .services.planning import evaluate_active_goal, evaluate_goal, save_plan
 from .services.reporting import daily_markdown, daily_summary, weekly_markdown, weekly_summary
-from .util import json_dump, now_iso, parse_datetime, read_json, require_int, require_str
+from .util import (
+    json_dump,
+    now_iso,
+    optional_number,
+    parse_datetime,
+    read_json,
+    require_int,
+    require_number,
+    require_str,
+)
 
 ROOT = Path.cwd()
 
@@ -49,6 +58,8 @@ class CliArgs(argparse.Namespace):
     waist: float | None = None
     start_weight: float = 0
     target_weight: float = 0
+    success_threshold_weight: float | None = None
+    evaluation_window_days: int = 1
     target_date: str = ""
     started_at: str | None = None
     activate: bool = False
@@ -126,6 +137,8 @@ def build_parser() -> argparse.ArgumentParser:
     goal_add = goal.add_parser("add")
     _ = goal_add.add_argument("--start-weight", type=float, required=True)
     _ = goal_add.add_argument("--target-weight", type=float, required=True)
+    _ = goal_add.add_argument("--success-threshold-weight", type=float)
+    _ = goal_add.add_argument("--evaluation-window-days", type=int, default=1)
     _ = goal_add.add_argument("--target-date", required=True)
     _ = goal_add.add_argument("--started-at")
     _ = goal_add.add_argument("--note")
@@ -134,6 +147,9 @@ def build_parser() -> argparse.ArgumentParser:
     for action in ("show", "activate", "recalculate"):
         p = goal.add_parser(action)
         _ = p.add_argument("id", type=int)
+    goal_evaluate = goal.add_parser("evaluate")
+    _ = goal_evaluate.add_argument("id", type=int)
+    _ = goal_evaluate.add_argument("--date")
     goal_update = goal.add_parser("update")
     _ = goal_update.add_argument("id", type=int)
     _ = goal_update.add_argument("--json", type=Path, required=True)
@@ -264,9 +280,9 @@ def run(args: CliArgs) -> object:
         )
     _require_db(p["db"])
     if command == "goal":
-        return _goal(args, p["db"])
+        return _goal(args, p["db"], load_profile(p["profile"]))
     if command == "meal":
-        return _meal(args, p["db"])
+        return _meal(args, p["db"], load_profile(p["profile"]))
     if command == "exercise":
         return _exercise(args, p["db"])
     if command == "metric":
@@ -286,7 +302,11 @@ def run(args: CliArgs) -> object:
     if command == "report":
         return _report(args, p)
     if command == "advice":
-        return generate_advice(p["db"], _date(args.date), 1 if action == "today" else 7)
+        return (
+            generate_daily_advice(p["db"], _date(args.date))
+            if action == "today"
+            else generate_advice(p["db"], _date(args.date), 7)
+        )
     if command == "backup":
         if action == "create":
             return {"path": str(create_backup(p["db"], p["backup"]))}
@@ -306,10 +326,26 @@ def run(args: CliArgs) -> object:
     raise ValueError("未対応のコマンドです")
 
 
-def _goal(args: CliArgs, db: Path) -> object:
+def _validate_goal_threshold(
+    start_weight: float, target_weight: float, threshold_weight: float | None
+) -> None:
+    if threshold_weight is None:
+        return
+    if target_weight < start_weight and not target_weight <= threshold_weight < start_weight:
+        raise ValueError("減量の達成最低ラインは挑戦目標以上、開始体重未満にしてください")
+    if target_weight > start_weight and not start_weight < threshold_weight <= target_weight:
+        raise ValueError("増量の達成最低ラインは開始体重より大きく、挑戦目標以下にしてください")
+
+
+def _goal(args: CliArgs, db: Path, profile: dict[str, object]) -> object:
     if args.action == "add":
         if date.fromisoformat(args.target_date) <= date.today():
             raise ValueError("目標日は今日より後にしてください")
+        if not 1 <= args.evaluation_window_days <= 28:
+            raise ValueError("評価期間は1〜28日にしてください")
+        _validate_goal_threshold(
+            args.start_weight, args.target_weight, args.success_threshold_weight
+        )
         goal_id = insert(
             db,
             "goals",
@@ -318,6 +354,8 @@ def _goal(args: CliArgs, db: Path) -> object:
                 "target_date": args.target_date,
                 "start_weight": args.start_weight,
                 "target_weight": args.target_weight,
+                "success_threshold_weight": args.success_threshold_weight,
+                "evaluation_window_days": args.evaluation_window_days,
                 "target_type": "weight_loss"
                 if args.target_weight < args.start_weight
                 else "weight_change",
@@ -327,7 +365,7 @@ def _goal(args: CliArgs, db: Path) -> object:
             },
         )
         goal = activate_goal(db, goal_id) if args.activate else get(db, "goals", goal_id)
-        return {"goal": goal, "plan": save_plan(db, goal_id)}
+        return {"goal": goal, "plan": save_plan(db, goal_id, profile=profile)}
     if args.action == "list":
         return list_rows(db, "goals")
     if args.action == "show":
@@ -336,6 +374,10 @@ def _goal(args: CliArgs, db: Path) -> object:
         return goal
     if args.action == "activate":
         return activate_goal(db, args.id)
+    if args.action == "evaluate":
+        return evaluate_goal(
+            db, args.id, evaluation_date=date.fromisoformat(args.date) if args.date else None
+        )
     if args.action == "update":
         if args.json is None:
             raise ValueError("--json が必要です")
@@ -345,16 +387,25 @@ def _goal(args: CliArgs, db: Path) -> object:
             and date.fromisoformat(require_str(data, "target_date")[:10]) <= date.today()
         ):
             raise ValueError("目標日は今日より後にしてください")
+        current = get(db, "goals", args.id)
+        candidate = {**current, **data}
+        start_weight = require_number(candidate, "start_weight")
+        target_weight = require_number(candidate, "target_weight")
+        threshold_weight = optional_number(candidate, "success_threshold_weight")
+        _validate_goal_threshold(start_weight, target_weight, threshold_weight)
+        window_value = data.get("evaluation_window_days", current.get("evaluation_window_days", 1))
+        if not isinstance(window_value, int) or not 1 <= window_value <= 28:
+            raise ValueError("評価期間は1〜28日にしてください")
         return update(db, "goals", args.id, data)
     if args.action == "delete":
         if not args.yes:
             raise ValueError("削除には --yes が必要です")
         delete(db, "goals", args.id)
         return {"deleted": args.id}
-    return save_plan(db, args.id)
+    return save_plan(db, args.id, profile=profile)
 
 
-def _meal(args: CliArgs, db: Path) -> object:
+def _meal(args: CliArgs, db: Path, profile: dict[str, object]) -> object:
     if args.action == "add":
         data: dict[str, object] = (
             read_json(args.json)
@@ -388,6 +439,7 @@ def _meal(args: CliArgs, db: Path) -> object:
             payload=intake_payload,
             result_id=require_int(meal, "id"),
         )
+        meal["advice_after_meal"] = generate_meal_advice(db, meal, profile)
         return meal
     if args.action == "list":
         return list_rows(db, "meals", order_by="eaten_at DESC", limit=args.limit)
@@ -494,9 +546,11 @@ def _report(args: CliArgs, p: dict[str, Path]) -> object:
     day = _date(args.date)
     if args.action == "daily":
         summary = daily_summary(p["db"], day)
+        advice = generate_daily_advice(p["db"], day)
+        goal_evaluation = evaluate_active_goal(p["db"], evaluation_date=day)
         if args.format == "json":
-            return summary
-        content = daily_markdown(summary)
+            return {**summary, "advice": advice, "goal_evaluation": goal_evaluation}
+        content = daily_markdown(summary, advice, goal_evaluation)
         output = p["daily"] / f"{day}.md"
     else:
         summary = weekly_summary(p["db"], day)
