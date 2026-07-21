@@ -1,0 +1,3 @@
+-- 実行時の正本は src/diet_assistant/db.py の SCHEMA_SQL。
+-- このファイルは初期スキーマの履歴を示す。PRAGMA user_version = 1。
+-- スキーマ変更時は次番号のマイグレーションを追加する。

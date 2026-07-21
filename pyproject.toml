@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "diet-assistant"
+version = "0.1.0"
+description = "SQLiteを正本とする個人向けAIダイエット支援CLI"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["basedpyright>=1.39.9", "pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+diet = "diet_assistant.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.basedpyright]
+typeCheckingMode = "recommended"
+pythonVersion = "3.14"
+include = ["src", "tests"]
+extraPaths = ["src"]

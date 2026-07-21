@@ -1,0 +1,12 @@
+{
+  "height_cm": 170,
+  "birth_date": "1990-01-01",
+  "sex": "unspecified",
+  "activity_level": "moderate",
+  "timezone": "Asia/Tokyo",
+  "dietary_restrictions": [],
+  "allergies": [],
+  "meals_per_day": 3,
+  "advice_preference": "小さく継続可能な変更を優先",
+  "photo_retention_days": 30
+}
