@@ -1,8 +1,22 @@
 from __future__ import annotations
 
 import json
+from datetime import date
+from importlib import resources
 from pathlib import Path
 from typing import cast
+
+SCHEMA_RESOURCE = "profile.schema.json"
+
+_TYPE_LABELS = {
+    "string": "文字列",
+    "number": "数値",
+    "integer": "整数",
+    "boolean": "真偽値",
+    "array": "配列",
+    "object": "オブジェクト",
+    "null": "null",
+}
 
 
 def load_profile(path: Path) -> dict[str, object]:
@@ -15,15 +29,98 @@ def load_profile(path: Path) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
-def validate_profile(profile: dict[str, object]) -> list[str]:
+def load_schema() -> dict[str, object]:
+    text = resources.files(__package__ or "diet_assistant").joinpath(SCHEMA_RESOURCE).read_text(
+        encoding="utf-8"
+    )
+    return cast(dict[str, object], json.loads(text))
+
+
+def validate_profile(
+    profile: dict[str, object], schema: dict[str, object] | None = None
+) -> list[str]:
+    return _validate(profile, schema if schema is not None else load_schema(), "プロフィール")
+
+
+def _validate(value: object, schema: dict[str, object], path: str) -> list[str]:
     errors: list[str] = []
-    height = profile.get("height_cm")
-    if height is not None and (not isinstance(height, (int, float)) or not 100 <= height <= 250):
-        errors.append("height_cm は100〜250の数値にしてください")
-    meals = profile.get("meals_per_day")
-    if meals is not None and (not isinstance(meals, int) or not 1 <= meals <= 10):
-        errors.append("meals_per_day は1〜10の整数にしてください")
-    retention = profile.get("photo_retention_days")
-    if retention is not None and (not isinstance(retention, int) or retention < 1):
-        errors.append("photo_retention_days は1以上の整数にしてください")
+    expected = schema.get("type")
+    if isinstance(expected, str) and not _matches_type(value, expected):
+        return [f"{path} は{_TYPE_LABELS.get(expected, expected)}にしてください"]
+
+    allowed = schema.get("enum")
+    if isinstance(allowed, list) and value not in cast(list[object], allowed):
+        joined = "、".join(str(item) for item in cast(list[object], allowed))
+        errors.append(f"{path} は {joined} のいずれかにしてください")
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        minimum = schema.get("minimum")
+        if isinstance(minimum, (int, float)) and value < minimum:
+            errors.append(f"{path} は {minimum} 以上にしてください")
+        maximum = schema.get("maximum")
+        if isinstance(maximum, (int, float)) and value > maximum:
+            errors.append(f"{path} は {maximum} 以下にしてください")
+
+    if isinstance(value, str) and schema.get("format") == "date":
+        try:
+            _ = date.fromisoformat(value)
+        except ValueError:
+            errors.append(f"{path} は YYYY-MM-DD 形式の日付にしてください")
+
+    if isinstance(value, dict):
+        errors.extend(_validate_object(cast(dict[str, object], value), schema, path))
+    elif isinstance(value, list):
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, item in enumerate(cast(list[object], value)):
+                errors.extend(
+                    _validate(item, cast(dict[str, object], item_schema), f"{path}[{index}]")
+                )
     return errors
+
+
+def _validate_object(value: dict[str, object], schema: dict[str, object], path: str) -> list[str]:
+    errors: list[str] = []
+    raw_properties = schema.get("properties")
+    properties = cast(dict[str, object], raw_properties) if isinstance(raw_properties, dict) else {}
+
+    required = schema.get("required")
+    if isinstance(required, list):
+        for key in cast(list[object], required):
+            if isinstance(key, str) and key not in value:
+                errors.append(f"{_label(path, key)} は必須です")
+
+    if schema.get("additionalProperties") is False:
+        for key in value:
+            if key not in properties:
+                errors.append(f"{_label(path, key)} は未知のキーです")
+
+    for key, item in value.items():
+        item_schema = properties.get(key)
+        if isinstance(item_schema, dict):
+            errors.extend(
+                _validate(item, cast(dict[str, object], item_schema), _label(path, key))
+            )
+    return errors
+
+
+def _label(path: str, key: str) -> str:
+    return key if path == "プロフィール" else f"{path}.{key}"
+
+
+def _matches_type(value: object, type_name: str) -> bool:
+    if type_name == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if type_name == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if type_name == "string":
+        return isinstance(value, str)
+    if type_name == "boolean":
+        return isinstance(value, bool)
+    if type_name == "array":
+        return isinstance(value, list)
+    if type_name == "object":
+        return isinstance(value, dict)
+    if type_name == "null":
+        return value is None
+    return True

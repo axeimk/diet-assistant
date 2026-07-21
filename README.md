@@ -51,6 +51,27 @@ diet profile validate
 
 `doctor`が`ok: true`を返せば完了です。
 
+### プロフィールの項目
+
+**必須の項目はありません。** ファイルが無くてもCLIは動きます（`doctor`が`profile_exists: false`と出るだけ）。書いた項目だけが検証されます。
+
+| キー | 型・制約 | 使われ方 |
+| --- | --- | --- |
+| `photo_retention_days` | 1以上の整数 | `diet photo cleanup`の既定保持日数。**未設定なら30** |
+| `height_cm` | 100〜250の数値 | 助言の文脈 |
+| `birth_date` | `YYYY-MM-DD` | 助言の文脈 |
+| `sex` | `female` / `male` / `unspecified` | 助言の文脈 |
+| `activity_level` | `sedentary` / `light` / `moderate` / `active` / `very_active` | 助言の文脈 |
+| `meals_per_day` | 1〜10の整数 | 助言の文脈 |
+| `dietary_restrictions` | 文字列の配列 | 助言の文脈 |
+| `allergies` | 文字列の配列 | 助言の文脈 |
+| `advice_preference` | 文字列（自由記述） | 助言の方針 |
+| `timezone` | IANAタイムゾーン名 | **現在は未使用**。日時はOSのタイムゾーンで扱う |
+
+コードが実際に読むのは`photo_retention_days`だけです。他はエージェントが助言を組み立てるときの文脈として使います。MVPでは`height_cm`や`activity_level`から維持カロリーを自動算出しません。
+
+形式の正本は[`src/diet_assistant/profile.schema.json`](src/diet_assistant/profile.schema.json)（JSON Schema draft 2020-12）です。`diet profile validate`はこのスキーマで検証し、VS Codeでは`config/profile.json`の編集中に補完と警告が効きます。未知のキーはタイプミス検出のためエラーになります。
+
 ## 日常の使い方
 
 以下はすべて、リポジトリ内でエージェントに話しかける例です。

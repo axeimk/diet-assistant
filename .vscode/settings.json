@@ -1,3 +1,9 @@
 {
-  "python.analysis.typeCheckingMode": "off"
+  "python.analysis.typeCheckingMode": "off",
+  "json.schemas": [
+    {
+      "fileMatch": ["config/profile.json", "config/profile.example.json"],
+      "url": "./src/diet_assistant/profile.schema.json"
+    }
+  ]
 }

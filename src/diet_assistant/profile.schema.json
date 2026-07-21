@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Diet Assistant プロフィール",
+  "description": "config/profile.json の形式。すべての項目が任意で、ファイル自体が無くてもCLIは動作する。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "エディタ補完用のスキーマ参照。検証では無視する。"
+    },
+    "height_cm": {
+      "type": "number",
+      "minimum": 100,
+      "maximum": 250,
+      "description": "身長（cm）。現在は助言の文脈として使い、計算には使わない。"
+    },
+    "birth_date": {
+      "type": "string",
+      "format": "date",
+      "description": "生年月日（YYYY-MM-DD）。現在は助言の文脈として使う。"
+    },
+    "sex": {
+      "type": "string",
+      "enum": ["female", "male", "unspecified"],
+      "description": "現在は助言の文脈として使う。"
+    },
+    "activity_level": {
+      "type": "string",
+      "enum": ["sedentary", "light", "moderate", "active", "very_active"],
+      "description": "日常の活動量。現在は助言の文脈として使う。"
+    },
+    "timezone": {
+      "type": "string",
+      "description": "IANAタイムゾーン名。現在コードからは参照せず、OSのタイムゾーンを使う。将来用。"
+    },
+    "dietary_restrictions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "食事制限。例: [\"低塩\", \"乳製品を控える\"]"
+    },
+    "allergies": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "アレルギー。例: [\"そば\", \"えび\"]"
+    },
+    "meals_per_day": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "1日の食事回数の目安。"
+    },
+    "advice_preference": {
+      "type": "string",
+      "description": "助言の方針。エージェントが読む自由記述。"
+    },
+    "photo_retention_days": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "diet photo cleanup の既定保持日数。未設定なら30。"
+    }
+  }
+}
