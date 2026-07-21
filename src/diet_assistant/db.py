@@ -4,8 +4,9 @@ import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import cast
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -27,10 +28,52 @@ def transaction(path: Path) -> Generator[sqlite3.Connection]:
         connection.close()
 
 
-def initialize(path: Path) -> None:
+def initialize(path: Path) -> list[int]:
+    """スキーマを作成し、既存DBには未適用のマイグレーションを適用する。
+
+    戻り値は適用したマイグレーションのバージョン一覧（新規作成時は空）。
+    """
+    with connect(path) as connection:
+        fresh = (
+            connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='meals'"
+            ).fetchone()
+            is None
+        )
     with transaction(path) as connection:
         _ = connection.executescript(SCHEMA_SQL)
-        _ = connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        if fresh:
+            _ = connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    return [] if fresh else migrate(path)
+
+
+def schema_version(path: Path) -> int:
+    with connect(path) as connection:
+        row = cast(tuple[int], connection.execute("PRAGMA user_version").fetchone())
+    return row[0]
+
+
+def migrate(path: Path) -> list[int]:
+    """`PRAGMA user_version`より新しいマイグレーションを順に適用する。"""
+    version = schema_version(path)
+    applied: list[int] = []
+    for target in sorted(MIGRATIONS):
+        if target <= version:
+            continue
+        with transaction(path) as connection:
+            _ = connection.executescript(MIGRATIONS[target])
+            _ = connection.execute(f"PRAGMA user_version = {target}")
+        applied.append(target)
+    return applied
+
+
+# 各マイグレーションは冪等ではない。適用済みかどうかは PRAGMA user_version だけで判定する。
+MIGRATIONS: dict[int, str] = {
+    2: """
+ALTER TABLE meals ADD COLUMN sodium REAL CHECK(sodium >= 0);
+ALTER TABLE meal_items ADD COLUMN sodium REAL CHECK(sodium >= 0);
+""",
+}
 
 
 SCHEMA_SQL = """
@@ -79,6 +122,7 @@ CREATE TABLE IF NOT EXISTS meals (
     fat REAL CHECK(fat >= 0),
     carbohydrates REAL CHECK(carbohydrates >= 0),
     fiber REAL CHECK(fiber >= 0),
+    sodium REAL CHECK(sodium >= 0),
     estimation_confidence TEXT CHECK(estimation_confidence IN ('low','medium','high')),
     source TEXT NOT NULL DEFAULT 'manual',
     created_at TEXT NOT NULL,
@@ -101,6 +145,7 @@ CREATE TABLE IF NOT EXISTS meal_items (
     protein REAL CHECK(protein >= 0),
     fat REAL CHECK(fat >= 0),
     carbohydrates REAL CHECK(carbohydrates >= 0),
+    sodium REAL CHECK(sodium >= 0),
     confidence TEXT CHECK(confidence IN ('low','medium','high')),
     note TEXT
 );

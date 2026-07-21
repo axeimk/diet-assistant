@@ -94,6 +94,7 @@ def add_meal(path: Path, data: dict[str, object]) -> dict[str, object]:
         "fat": data.pop("fat", None),
         "carbohydrates": data.pop("carbohydrates", None),
         "fiber": data.pop("fiber", None),
+        "sodium": data.pop("sodium", None),
         "estimation_confidence": data.pop("estimation_confidence", None),
         "source": data.pop("source", "manual"),
         "created_at": timestamp,
@@ -120,6 +121,7 @@ def add_meal(path: Path, data: dict[str, object]) -> dict[str, object]:
             "protein",
             "fat",
             "carbohydrates",
+            "sodium",
             "confidence",
             "note",
         }

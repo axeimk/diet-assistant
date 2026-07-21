@@ -29,13 +29,13 @@ CLI / Codex / iPhone inbox JSON
 
 ## DBスキーマ
 
-初期スキーマは`db.py`の`SCHEMA_SQL`、バージョンは`PRAGMA user_version=1`で管理する。
+スキーマの正本は`db.py`の`SCHEMA_SQL`、バージョンは`PRAGMA user_version`で管理する。既存DBの変更は`db.py`の`MIGRATIONS`に版番号付きで追加し、`diet init`が未適用分だけを順に適用する。`migrations/*.sql`は履歴の記録で、実行はしない。
 
 | テーブル | 役割 | 主な関係・制約 |
 |---|---|---|
 | `goals` | 体重目標 | partial unique indexでactiveは1件 |
 | `plans` | 再計算履歴 | goalに従属、旧計画はsuperseded |
-| `meals` | 食事 | カロリー範囲とconfidenceを検査 |
+| `meals` | 食事 | カロリー範囲とconfidenceを検査、`sodium`は食塩相当量g |
 | `meal_items` | 食事内訳 | meal削除時にcascade |
 | `exercises` | 運動 | 種目ごとの任意属性 |
 | `body_metrics` | 身体測定 | 体重・体脂肪率・胴囲 |

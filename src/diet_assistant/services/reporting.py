@@ -23,6 +23,7 @@ class MealRecord(TypedDict):
     fat: float | None
     carbohydrates: float | None
     fiber: float | None
+    sodium: float | None
     estimation_confidence: str | None
 
 
@@ -42,6 +43,7 @@ class Totals(TypedDict):
     fat: float
     carbohydrates: float
     fiber: float
+    sodium: float
     exercise_minutes: float
 
 
@@ -132,6 +134,7 @@ def daily_summary(path: Path, day: date) -> DailySummary:
             "fat": numeric_total(row["fat"] for row in meals),
             "carbohydrates": numeric_total(row["carbohydrates"] for row in meals),
             "fiber": numeric_total(row["fiber"] for row in meals),
+            "sodium": numeric_total(row["sodium"] for row in meals),
             "exercise_minutes": round(sum(row["duration_minutes"] or 0 for row in exercises), 1),
         },
         "target_daily_calories": target,
@@ -218,6 +221,7 @@ def daily_markdown(summary: DailySummary) -> str:
             + f"（範囲 {totals['calories_min']}〜{totals['calories_max']} kcal）",
             f"- P/F/C/食物繊維: {totals['protein']}/{totals['fat']}/"
             + f"{totals['carbohydrates']}/{totals['fiber']} g",
+            f"- 食塩相当量: {totals['sodium']} g",
             f"- 運動時間: {totals['exercise_minutes']}分",
             f"- 体重: {weight} kg",
             f"- 目標との差: {difference_text}",

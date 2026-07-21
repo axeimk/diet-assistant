@@ -8,5 +8,5 @@ from diet_assistant.db import initialize
 @pytest.fixture
 def db_path(tmp_path: Path) -> Path:
     path = tmp_path / "data/diet.db"
-    initialize(path)
+    _ = initialize(path)
     return path

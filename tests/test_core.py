@@ -7,7 +7,7 @@ from typing import cast
 
 import pytest
 
-from diet_assistant.db import connect
+from diet_assistant.db import SCHEMA_VERSION, connect, initialize, migrate, schema_version
 from diet_assistant.repository import add_meal, get, insert
 from diet_assistant.services.intake import import_file
 from diet_assistant.services.maintenance import cleanup_candidates, create_backup
@@ -25,7 +25,7 @@ def test_db_initialization(db_path: Path) -> None:
         tables = {row[0] for row in table_rows}
         version = cast(tuple[int], connection.execute("PRAGMA user_version").fetchone())[0]
     assert {"meals", "exercises", "body_metrics", "goals", "plans", "intake_entries"} <= tables
-    assert version == 1
+    assert version == SCHEMA_VERSION
 
 
 def test_add_meal_with_items(db_path: Path) -> None:
@@ -86,6 +86,83 @@ def test_add_exercise_and_metric(db_path: Path) -> None:
     )
     assert get(db_path, "exercises", exercise_id)["duration_minutes"] == 30
     assert get(db_path, "body_metrics", metric_id)["weight"] == 70
+
+
+def test_sodium_recorded_and_totalled(db_path: Path) -> None:
+    meal = add_meal(
+        db_path,
+        {
+            "eaten_at": "2026-07-20T14:00:00+09:00",
+            "meal_type": "lunch",
+            "estimated_calories": 304,
+            "sodium": 5.2,
+            "items": [{"name": "ラーメン", "sodium": 5.2, "confidence": "high"}],
+        },
+    )
+    assert meal["sodium"] == 5.2
+    items = cast(list[dict[str, object]], meal["items"])
+    assert items[0]["sodium"] == 5.2
+    assert daily_summary(db_path, date(2026, 7, 20))["totals"]["sodium"] == 5.2
+
+
+def test_negative_sodium_rejected(db_path: Path) -> None:
+    with pytest.raises(sqlite3.IntegrityError):
+        _ = add_meal(db_path, {"meal_type": "lunch", "sodium": -1})
+
+
+def _initialize_v1(path: Path) -> None:
+    """マイグレーション検証用に、sodium列を持たないv1スキーマを作る。"""
+    with connect(path) as connection:
+        _ = connection.executescript(
+            "CREATE TABLE meals (id INTEGER PRIMARY KEY, eaten_at TEXT, protein REAL);"
+            + "CREATE TABLE meal_items (id INTEGER PRIMARY KEY, meal_id INTEGER, name TEXT);"
+            + "INSERT INTO meals (eaten_at, protein) VALUES ('2026-07-20T12:00:00+09:00', 10);"
+        )
+        _ = connection.execute("PRAGMA user_version = 1")
+        connection.commit()
+
+
+def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
+    path = tmp_path / "data/diet.db"
+    _initialize_v1(path)
+
+    applied = migrate(path)
+
+    assert applied == [2]
+    assert schema_version(path) == SCHEMA_VERSION
+    with connect(path) as connection:
+        row = tuple(
+            cast(sqlite3.Row, connection.execute("SELECT protein, sodium FROM meals").fetchone())
+        )
+        item_columns = {
+            cast(tuple[int, str], info)[1]
+            for info in cast(
+                list[tuple[object, ...]],
+                connection.execute("PRAGMA table_info(meal_items)").fetchall(),
+            )
+        }
+    assert row == (10, None), "既存の行は保持され、sodiumはNULLで埋まる"
+    assert "sodium" in item_columns
+
+
+def test_migration_is_not_reapplied(tmp_path: Path) -> None:
+    path = tmp_path / "data/diet.db"
+    _initialize_v1(path)
+    _ = migrate(path)
+
+    assert migrate(path) == [], "適用済みのマイグレーションは再実行しない"
+
+
+def test_initialize_migrates_existing_db(tmp_path: Path) -> None:
+    path = tmp_path / "data/diet.db"
+    _initialize_v1(path)
+
+    assert initialize(path) == [2]
+    assert schema_version(path) == SCHEMA_VERSION
+
+
+def test_initialize_skips_migrations_for_new_db(tmp_path: Path) -> None:
+    assert initialize(tmp_path / "data/diet.db") == []
 
 
 def _goal(db_path: Path, target_date: str = "2026-10-13") -> int:

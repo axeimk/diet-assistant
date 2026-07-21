@@ -119,6 +119,7 @@ def process_entry(
             "fat",
             "carbohydrates",
             "fiber",
+            "sodium",
             "estimation_confidence",
             "items",
         ):

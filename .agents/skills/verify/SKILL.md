@@ -28,7 +28,8 @@ diet --root "$DIET_VERIFY_ROOT" init
 diet --root "$DIET_VERIFY_ROOT" doctor
 ```
 
-- `init` が `{"database": ..., "schema_version": 1}` を返せば DB を作れている。
+- `init` が `{"database": ..., "schema_version": <現在の版>, "migrations_applied": []}` を
+  返せば DB を作れている。新規 DB では `migrations_applied` は空。
 - `doctor` の `"ok": true` が起動確認。`profile_exists` は false でよい（プロフィール未配置）。
 - すべてのコマンドは JSON を標準出力へ返す。エラーは JSON を標準エラーへ返し終了コード 2。
   **終了コードも確認する**（`echo $?`）。
@@ -36,6 +37,26 @@ diet --root "$DIET_VERIFY_ROOT" doctor
 ## 確認すべき代表フロー
 
 変更箇所に関係するフローを選んで実行する。全部を毎回回す必要はない。
+
+### スキーマ移行（db.py の SCHEMA_SQL / MIGRATIONS を変更したとき）
+
+新規 DB だけでなく**既存 DB の移行**を確認する。本番 DB のコピーを使うと実データで検証できる
+（コピー先は一時ディレクトリ。本番の `data/diet.db` は読むだけで書き換えない）。
+
+```bash
+export DIET_MIGRATE_ROOT=$(mktemp -d)
+mkdir -p "$DIET_MIGRATE_ROOT/data"
+cp data/diet.db "$DIET_MIGRATE_ROOT/data/diet.db"
+diet --root "$DIET_MIGRATE_ROOT" init      # migrations_applied に版番号が並ぶ
+diet --root "$DIET_MIGRATE_ROOT" doctor    # ok: true
+diet --root "$DIET_MIGRATE_ROOT" init      # 2 回目は migrations_applied が空
+```
+
+期待: 1 回目で未適用分だけが適用され、2 回目は再適用されない。移行後に
+`report daily`／`meal list` で**既存の記録が消えていないこと**を必ず確認する。
+移行前の DB では `doctor` が `ok: false` と `hint` を返す。
+
+終わったら `rm -rf "$DIET_MIGRATE_ROOT"`。
 
 ### 記録の CRUD（cli.py / repository.py を変更したとき）
 

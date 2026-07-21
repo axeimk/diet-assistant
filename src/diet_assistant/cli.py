@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 
 from .config import load_profile, validate_profile
-from .db import SCHEMA_VERSION, connect, initialize
+from .db import SCHEMA_VERSION, initialize, schema_version
 from .repository import (
     NotFoundError,
     activate_goal,
@@ -62,6 +62,7 @@ class CliArgs(argparse.Namespace):
     fat: float | None = None
     carbs: float | None = None
     fiber: float | None = None
+    sodium: float | None = None
     confidence: str | None = None
     source: str = "manual"
     limit: int = 100
@@ -154,6 +155,7 @@ def build_parser() -> argparse.ArgumentParser:
     _ = meal_add.add_argument("--fat", type=float)
     _ = meal_add.add_argument("--carbs", type=float)
     _ = meal_add.add_argument("--fiber", type=float)
+    _ = meal_add.add_argument("--sodium", type=float, help="食塩相当量（g）")
     _ = meal_add.add_argument("--confidence", choices=["low", "medium", "high"])
     _ = meal_add.add_argument("--source", default="manual")
     meal_list = meal.add_parser("list")
@@ -228,20 +230,30 @@ def run(args: CliArgs) -> object:
     command = args.command
     action = getattr(args, "action", None)
     if command == "init":
-        initialize(p["db"])
+        applied = initialize(p["db"])
         for key in ("inbox", "temporary", "backup", "daily", "weekly"):
             p[key].mkdir(parents=True, exist_ok=True)
-        return {"database": str(p["db"]), "schema_version": SCHEMA_VERSION}
+        return {
+            "database": str(p["db"]),
+            "schema_version": SCHEMA_VERSION,
+            "migrations_applied": applied,
+        }
     if command == "doctor":
-        checks = {
+        exists = p["db"].exists()
+        version = schema_version(p["db"]) if exists else None
+        checks: dict[str, object] = {
             "python": sys.version.split()[0],
-            "database_exists": p["db"].exists(),
+            "database_exists": exists,
             "profile_exists": p["profile"].exists(),
         }
-        if p["db"].exists():
-            with connect(p["db"]) as connection:
-                checks["schema_version"] = connection.execute("PRAGMA user_version").fetchone()[0]
-        checks["ok"] = checks["database_exists"] and checks.get("schema_version") == SCHEMA_VERSION
+        if version is not None:
+            checks["schema_version"] = version
+        checks["ok"] = exists and version == SCHEMA_VERSION
+        if exists and version != SCHEMA_VERSION:
+            checks["hint"] = (
+                f"スキーマが古いか未知です（期待 {SCHEMA_VERSION}）。"
+                + "diet backup create のあと diet init で移行してください"
+            )
         return checks
     if command == "profile":
         profile = load_profile(p["profile"])
@@ -359,6 +371,7 @@ def _meal(args: CliArgs, db: Path) -> object:
                 "fat": args.fat,
                 "carbohydrates": args.carbs,
                 "fiber": args.fiber,
+                "sodium": args.sodium,
                 "estimation_confidence": args.confidence,
                 "source": args.source,
             }
