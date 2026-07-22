@@ -4,6 +4,7 @@
   "sex": "unspecified",
   "activity_level": "moderate",
   "timezone": "Asia/Tokyo",
+  "day_start_time": "04:00",
   "dietary_restrictions": [],
   "allergies": [],
   "meals_per_day": 3,

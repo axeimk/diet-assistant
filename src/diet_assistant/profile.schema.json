@@ -34,6 +34,11 @@
       "type": "string",
       "description": "IANAタイムゾーン名。現在コードからは参照せず、OSのタイムゾーンを使う。将来用。"
     },
+    "day_start_time": {
+      "type": "string",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+      "description": "記録上の一日の開始時刻（HH:MM）。日次・週次レポートと助言の集計境界に使う。未設定なら00:00。"
+    },
     "dietary_restrictions": {
       "type": "array",
       "items": { "type": "string" },

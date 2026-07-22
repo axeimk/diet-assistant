@@ -34,6 +34,58 @@ def test_cli_error_code(tmp_path: Path, capsys: CaptureFixture[str]) -> None:
     assert "diet init" in json.loads(capsys.readouterr().err)["error"]
 
 
+def test_daily_report_assigns_early_morning_meal_to_previous_day(
+    tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    root_args = ["--root", str(tmp_path)]
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _ = (config_dir / "profile.json").write_text(
+        json.dumps({"day_start_time": "04:00"}), encoding="utf-8"
+    )
+    assert main([*root_args, "init"]) == 0
+    _ = capsys.readouterr()
+    assert (
+        main(
+            [
+                *root_args,
+                "meal",
+                "add",
+                "--type",
+                "snack",
+                "--at",
+                "2026-07-23T00:08:00+09:00",
+                "--calories",
+                "46",
+            ]
+        )
+        == 0
+    )
+    meal_output = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
+    meal_advice = cast(dict[str, object], meal_output["advice_after_meal"])
+    evidence = cast(dict[str, object], meal_advice["evidence"])
+    assert evidence["date"] == "2026-07-22"
+
+    assert (
+        main(
+            [*root_args, "report", "daily", "--date", "2026-07-22", "--format", "json"]
+        )
+        == 0
+    )
+    previous_day = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
+    previous_meals = cast(list[dict[str, object]], previous_day["meals"])
+    assert [meal["meal_type"] for meal in previous_meals] == ["snack"]
+
+    assert (
+        main(
+            [*root_args, "report", "daily", "--date", "2026-07-23", "--format", "json"]
+        )
+        == 0
+    )
+    current_day = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
+    assert current_day["meals"] == []
+
+
 def test_meal_and_daily_report_include_goal_based_advice(
     tmp_path: Path, capsys: CaptureFixture[str]
 ) -> None:

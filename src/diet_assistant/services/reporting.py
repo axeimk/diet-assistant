@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 import statistics
 from collections.abc import Iterable
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from pathlib import Path
 from typing import NotRequired, TypedDict, cast
 
@@ -79,8 +79,8 @@ class PeriodSummary(TypedDict):
     pace_difference: NotRequired[float | None]
 
 
-def daily_summary(path: Path, day: date) -> DailySummary:
-    start, end = day_bounds(day)
+def daily_summary(path: Path, day: date, *, day_start: time = time.min) -> DailySummary:
+    start, end = day_bounds(day, starts_at=day_start)
     with connect(path) as connection:
         meal_rows = cast(
             list[sqlite3.Row],
@@ -143,9 +143,14 @@ def daily_summary(path: Path, day: date) -> DailySummary:
     }
 
 
-def period_summary(path: Path, end_day: date, days: int = 7) -> PeriodSummary:
+def period_summary(
+    path: Path, end_day: date, days: int = 7, *, day_start: time = time.min
+) -> PeriodSummary:
     start_day = end_day - timedelta(days=days - 1)
-    daily = [daily_summary(path, start_day + timedelta(days=i)) for i in range(days)]
+    daily = [
+        daily_summary(path, start_day + timedelta(days=i), day_start=day_start)
+        for i in range(days)
+    ]
     calories = [entry["totals"]["estimated_calories"] for entry in daily]
     weights = [
         entry["metric"]["weight"]
@@ -165,9 +170,9 @@ def period_summary(path: Path, end_day: date, days: int = 7) -> PeriodSummary:
     }
 
 
-def weekly_summary(path: Path, end_day: date) -> PeriodSummary:
-    current = period_summary(path, end_day, 7)
-    previous = period_summary(path, end_day - timedelta(days=7), 7)
+def weekly_summary(path: Path, end_day: date, *, day_start: time = time.min) -> PeriodSummary:
+    current = period_summary(path, end_day, 7, day_start=day_start)
+    previous = period_summary(path, end_day - timedelta(days=7), 7, day_start=day_start)
     current["previous_week"] = {
         "average_calories": previous["average_calories"],
         "average_weight": previous["average_weight"],

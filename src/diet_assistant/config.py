@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+import re
+from datetime import date, time
 from importlib import resources
 from pathlib import Path
 from typing import cast
@@ -42,6 +43,19 @@ def validate_profile(
     return _validate(profile, schema if schema is not None else load_schema(), "プロフィール")
 
 
+def profile_day_start_time(profile: dict[str, object]) -> time:
+    value = profile.get("day_start_time", "00:00")
+    if not isinstance(value, str):
+        raise ValueError("day_start_time は HH:MM 形式の時刻にしてください")
+    try:
+        parsed = time.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError("day_start_time は HH:MM 形式の時刻にしてください") from error
+    if len(value) != 5 or parsed.second or parsed.microsecond or parsed.tzinfo is not None:
+        raise ValueError("day_start_time は HH:MM 形式の時刻にしてください")
+    return parsed
+
+
 def _validate(value: object, schema: dict[str, object], path: str) -> list[str]:
     errors: list[str] = []
     expected = schema.get("type")
@@ -66,6 +80,9 @@ def _validate(value: object, schema: dict[str, object], path: str) -> list[str]:
             _ = date.fromisoformat(value)
         except ValueError:
             errors.append(f"{path} は YYYY-MM-DD 形式の日付にしてください")
+    pattern = schema.get("pattern")
+    if isinstance(value, str) and isinstance(pattern, str) and re.search(pattern, value) is None:
+        errors.append(f"{path} は指定された形式にしてください")
 
     if isinstance(value, dict):
         errors.extend(_validate_object(cast(dict[str, object], value), schema, path))

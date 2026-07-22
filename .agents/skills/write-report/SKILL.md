@@ -10,11 +10,14 @@ description: diet-assistantの記録から日次・週次レポートをMarkdown
 
 ## 手順
 
-1. 対象日を依頼から読み取る。省略時は今日（`date +%F` で確認する）。
-2. レポートを生成する。`--root` は付けない（本番データの読み取りとレポート保存が目的のため）:
+1. 対象日を依頼から読み取る。明示された日付はその日を使う。「今日」または省略時は
+   `--date` を付けず、CLIにプロフィールの `day_start_time` を使ったレポート日を決めさせる。
+   たとえば開始時刻が04:00なら、7月23日00:08の記録は7月22日分になる。
+2. レポートを生成する。`--root` は付けない（本番データの読み取りとレポート保存が目的のため）。
+   日付が明示された場合だけ `--date <YYYY-MM-DD>` を加える:
 
    ```bash
-   diet report daily --date <YYYY-MM-DD> --format markdown
+   diet report daily --format markdown
    ```
 
    戻り値のJSONの `path`（`reports/daily/<日付>.md`）を読む。
@@ -23,7 +26,7 @@ description: diet-assistantの記録から日次・週次レポートをMarkdown
 3. 傾向データを取得する:
 
    ```bash
-   diet report weekly --date <YYYY-MM-DD> --format json
+   diet report weekly --format json
    ```
 
    使う値: `average_calories`・`average_weight`・`exercise_minutes`・`recorded_meal_days`・
@@ -31,8 +34,9 @@ description: diet-assistantの記録から日次・週次レポートをMarkdown
 4. 「出力体裁」に従って回答を組み立てる。補足はチャット回答にだけ付け、
    `reports/` のファイルはCLI生成のまま書き換えない（ファイルはCLI出力の正本のため）。
 
-週次レポートを求められた場合は、手順2を `diet report weekly --date <YYYY-MM-DD> --format markdown`
-に替える（`reports/weekly/` に保存される）。手順3以降は同じで、`changes` を前週比の補足に使う。
+週次レポートを求められた場合は、手順2を `diet report weekly --format markdown` に替える
+（`reports/weekly/` に保存される）。日付が明示された場合だけ同様に `--date` を加える。
+手順3以降は同じで、`changes` を前週比の補足に使う。
 
 ## 出力体裁
 
@@ -63,4 +67,5 @@ description: diet-assistantの記録から日次・週次レポートをMarkdown
 - 記録の追加・修正はこのスキルの範囲外。レポート中に明らかな記録漏れを見つけても
   黙って直さず、事実として指摘するにとどめる。
 - `--date` のタイムゾーンは記録の `eaten_at` とローカル時刻に依存する。
-  「今日の食事が出ない」ように見えたら、まず日付のずれを疑う。
+  `config/profile.json` の `day_start_time` より前の記録は前日のレポートへ入る。
+  「今日の食事が出ない」ように見えたら、暦日だけでなくこの境界も確認する。

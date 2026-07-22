@@ -1,7 +1,12 @@
 import json
 from pathlib import Path
 
-from diet_assistant.config import load_profile, load_schema, validate_profile
+from diet_assistant.config import (
+    load_profile,
+    load_schema,
+    profile_day_start_time,
+    validate_profile,
+)
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "config/profile.example.json"
 
@@ -65,3 +70,17 @@ def test_routine_rejects_unknown_step() -> None:
     errors = validate_profile({"routine": ["breakfast", "朝食"]})
     assert len(errors) == 1
     assert "routine[1]" in errors[0]
+
+
+def test_day_start_time_accepts_hours_and_minutes() -> None:
+    assert validate_profile({"day_start_time": "04:00"}) == []
+    assert profile_day_start_time({"day_start_time": "04:00"}).hour == 4
+
+
+def test_day_start_time_rejects_non_hh_mm_value() -> None:
+    errors = validate_profile({"day_start_time": "4:00"})
+    assert errors == ["day_start_time は指定された形式にしてください"]
+
+
+def test_day_start_time_rejects_out_of_range_value() -> None:
+    assert validate_profile({"day_start_time": "24:00"}) != []

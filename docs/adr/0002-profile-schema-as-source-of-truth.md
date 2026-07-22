@@ -13,7 +13,7 @@
 - **`jsonschema`パッケージを使う**: 実行時の外部依存が0個から1個になる。このツールは標準
   ライブラリだけで動きネットワークも不要という性質を持つため、10項目程度のフラットな
   オブジェクトを検証するためだけに崩す価値はないと判断した。使う機能は`type`・`enum`・
-  `minimum`・`maximum`・`format: date`・`additionalProperties`だけで、自作しても小さい。
+  `minimum`・`maximum`・`pattern`・`format: date`・`additionalProperties`だけで、自作しても小さい。
 - **スキーマはエディタ支援専用にし、検証は手書きのまま**: 実装コストは最小だが、ルールが
   スキーマと`config.py`の2か所に分かれてずれる。
 

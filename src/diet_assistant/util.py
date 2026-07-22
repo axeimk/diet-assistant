@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import cast
 
@@ -20,11 +20,16 @@ def parse_datetime(value: str | None, *, default: datetime | None = None) -> dat
     return parsed
 
 
-def day_bounds(day: date) -> tuple[str, str]:
+def day_bounds(day: date, *, starts_at: time = time.min) -> tuple[str, str]:
     zone = datetime.now().astimezone().tzinfo
-    start = datetime.combine(day, time.min, zone)
-    end = datetime.combine(day, time.max, zone)
+    start = datetime.combine(day, starts_at, zone)
+    end = datetime.combine(day + timedelta(days=1), starts_at, zone) - timedelta(microseconds=1)
     return start.isoformat(), end.isoformat()
+
+
+def reporting_date(moment: datetime, *, starts_at: time = time.min) -> date:
+    day = moment.date()
+    return day - timedelta(days=1) if moment.timetz().replace(tzinfo=None) < starts_at else day
 
 
 def json_dump(value: object) -> str:

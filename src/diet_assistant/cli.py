@@ -5,10 +5,10 @@ import json
 import sqlite3
 import sys
 import uuid
-from datetime import date
+from datetime import date, datetime, time
 from pathlib import Path
 
-from .config import load_profile, validate_profile
+from .config import load_profile, profile_day_start_time, validate_profile
 from .db import SCHEMA_VERSION, initialize, schema_version
 from .repository import (
     NotFoundError,
@@ -32,6 +32,7 @@ from .util import (
     optional_number,
     parse_datetime,
     read_json,
+    reporting_date,
     require_int,
     require_number,
     require_str,
@@ -302,10 +303,13 @@ def run(args: CliArgs) -> object:
     if command == "report":
         return _report(args, p)
     if command == "advice":
+        profile = load_profile(p["profile"])
+        day_start = profile_day_start_time(profile)
+        day = _report_date(args.date, day_start)
         return (
-            generate_daily_advice(p["db"], _date(args.date))
+            generate_daily_advice(p["db"], day, day_start=day_start)
             if action == "today"
-            else generate_advice(p["db"], _date(args.date), 7)
+            else generate_advice(p["db"], day, 7, day_start=day_start)
         )
     if command == "backup":
         if action == "create":
@@ -543,18 +547,22 @@ def _metric(args: CliArgs, db: Path) -> object:
 
 
 def _report(args: CliArgs, p: dict[str, Path]) -> object:
-    day = _date(args.date)
+    profile = load_profile(p["profile"])
+    day_start = profile_day_start_time(profile)
+    day = _report_date(args.date, day_start)
     if args.action == "daily":
-        summary = daily_summary(p["db"], day)
-        advice = generate_daily_advice(p["db"], day)
-        goal_evaluation = evaluate_active_goal(p["db"], evaluation_date=day)
+        summary = daily_summary(p["db"], day, day_start=day_start)
+        advice = generate_daily_advice(p["db"], day, day_start=day_start)
+        goal_evaluation = evaluate_active_goal(
+            p["db"], evaluation_date=day, day_start=day_start
+        )
         if args.format == "json":
             return {**summary, "advice": advice, "goal_evaluation": goal_evaluation}
         content = daily_markdown(summary, advice, goal_evaluation)
         output = p["daily"] / f"{day}.md"
     else:
-        summary = weekly_summary(p["db"], day)
-        advice = generate_advice(p["db"], day, 7)
+        summary = weekly_summary(p["db"], day, day_start=day_start)
+        advice = generate_advice(p["db"], day, 7, day_start=day_start)
         if args.format == "json":
             return {"summary": summary, "advice": advice}
         content = weekly_markdown(summary, advice)
@@ -566,8 +574,10 @@ def _report(args: CliArgs, p: dict[str, Path]) -> object:
     return {"path": str(output)}
 
 
-def _date(value: str | None) -> date:
-    return date.fromisoformat(value) if value else date.today()
+def _report_date(value: str | None, day_start: time) -> date:
+    if value:
+        return date.fromisoformat(value)
+    return reporting_date(datetime.now().astimezone(), starts_at=day_start)
 
 
 def _require_db(path: Path) -> None:

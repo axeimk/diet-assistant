@@ -1,7 +1,7 @@
 import json
 import os
 import sqlite3
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import cast
 
@@ -18,7 +18,7 @@ from diet_assistant.services.planning import (
     save_plan,
 )
 from diet_assistant.services.reporting import daily_summary, period_summary, weekly_summary
-from diet_assistant.util import now_iso, require_str
+from diet_assistant.util import now_iso, reporting_date, require_str
 
 
 def test_db_initialization(db_path: Path) -> None:
@@ -299,6 +299,37 @@ def test_daily_and_moving_averages(db_path: Path) -> None:
     assert daily["totals"]["estimated_calories"] == 1600
     assert moving["average_calories"] == 1300
     assert weekly["recorded_meal_days"] == 7
+
+
+def test_daily_summary_uses_configured_day_start(db_path: Path) -> None:
+    _ = add_meal(
+        db_path,
+        {
+            "eaten_at": "2026-07-23T00:08:00+09:00",
+            "meal_type": "snack",
+            "estimated_calories": 46,
+        },
+    )
+    _ = add_meal(
+        db_path,
+        {
+            "eaten_at": "2026-07-23T04:00:00+09:00",
+            "meal_type": "breakfast",
+            "estimated_calories": 200,
+        },
+    )
+
+    previous_day = daily_summary(db_path, date(2026, 7, 22), day_start=time(4))
+    current_day = daily_summary(db_path, date(2026, 7, 23), day_start=time(4))
+
+    assert [meal["meal_type"] for meal in previous_day["meals"]] == ["snack"]
+    assert previous_day["totals"]["estimated_calories"] == 46
+    assert [meal["meal_type"] for meal in current_day["meals"]] == ["breakfast"]
+
+
+def test_reporting_date_uses_previous_date_before_day_start() -> None:
+    assert reporting_date(datetime(2026, 7, 23, 0, 8), starts_at=time(4)) == date(2026, 7, 22)
+    assert reporting_date(datetime(2026, 7, 23, 4, 0), starts_at=time(4)) == date(2026, 7, 23)
 
 
 def test_pending_import_and_duplicate(db_path: Path, tmp_path: Path) -> None:

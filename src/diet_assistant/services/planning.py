@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from pathlib import Path
 from typing import cast
 
@@ -189,7 +189,11 @@ def save_plan(
 
 
 def evaluate_goal(
-    path: Path, goal_id: int, *, evaluation_date: date | None = None
+    path: Path,
+    goal_id: int,
+    *,
+    evaluation_date: date | None = None,
+    day_start: time = time.min,
 ) -> dict[str, object]:
     """評価期間の体重平均で、挑戦目標と達成最低ラインを判定する。"""
     goal = get(path, "goals", goal_id)
@@ -202,7 +206,7 @@ def evaluate_goal(
     with connect(path) as connection:
         for offset in range(window_days):
             day = start_day + timedelta(days=offset)
-            start, end = day_bounds(day)
+            start, end = day_bounds(day, starts_at=day_start)
             row = cast(
                 sqlite3.Row | None,
                 connection.execute(
@@ -263,7 +267,9 @@ def evaluate_goal(
     }
 
 
-def evaluate_active_goal(path: Path, *, evaluation_date: date) -> dict[str, object] | None:
+def evaluate_active_goal(
+    path: Path, *, evaluation_date: date, day_start: time = time.min
+) -> dict[str, object] | None:
     with connect(path) as connection:
         row = cast(
             sqlite3.Row | None,
@@ -276,4 +282,4 @@ def evaluate_active_goal(path: Path, *, evaluation_date: date) -> dict[str, obje
     goal_id_value = cast(object, row["id"])
     if not isinstance(goal_id_value, int):
         raise ValueError("有効な目標IDを取得できませんでした")
-    return evaluate_goal(path, goal_id_value, evaluation_date=evaluation_date)
+    return evaluate_goal(path, goal_id_value, evaluation_date=evaluation_date, day_start=day_start)

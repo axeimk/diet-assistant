@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import cast
 
+from ..config import profile_day_start_time
 from ..db import connect
 from ..repository import insert
-from ..util import now_iso, optional_number, require_int, require_str
+from ..util import now_iso, optional_number, reporting_date, require_int, require_str
 from .reporting import daily_summary, period_summary
 
 
@@ -24,8 +25,10 @@ def _active_plan(path: Path) -> dict[str, object]:
     return cast(dict[str, object], dict(plan)) if plan else {}
 
 
-def generate_daily_advice(path: Path, day: date, *, save: bool = True) -> dict[str, object]:
-    summary = daily_summary(path, day)
+def generate_daily_advice(
+    path: Path, day: date, *, day_start: time = time.min, save: bool = True
+) -> dict[str, object]:
+    summary = daily_summary(path, day, day_start=day_start)
     plan = _active_plan(path)
     target = optional_number(plan, "target_daily_calories")
     target_min = optional_number(plan, "target_calorie_range_min")
@@ -76,8 +79,9 @@ def generate_meal_advice(
     save: bool = True,
 ) -> dict[str, object]:
     eaten_at = datetime.fromisoformat(require_str(meal, "eaten_at"))
-    day = eaten_at.date()
-    summary = daily_summary(path, day)
+    day_start = profile_day_start_time(profile)
+    day = reporting_date(eaten_at, starts_at=day_start)
+    summary = daily_summary(path, day, day_start=day_start)
     plan = _active_plan(path)
     target = optional_number(plan, "target_daily_calories")
     target_min = optional_number(plan, "target_calorie_range_min")
@@ -131,9 +135,14 @@ def generate_meal_advice(
 
 
 def generate_advice(
-    path: Path, end_day: date, days: int = 7, *, save: bool = True
+    path: Path,
+    end_day: date,
+    days: int = 7,
+    *,
+    day_start: time = time.min,
+    save: bool = True,
 ) -> dict[str, object]:
-    summary = period_summary(path, end_day, days)
+    summary = period_summary(path, end_day, days, day_start=day_start)
     plan_record = _active_plan(path)
     target = optional_number(plan_record, "target_daily_calories")
     average = optional_number(summary, "average_calories")
