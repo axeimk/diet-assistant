@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -79,6 +79,9 @@ ALTER TABLE goals ADD COLUMN evaluation_window_days INTEGER NOT NULL DEFAULT 1
     CHECK(evaluation_window_days BETWEEN 1 AND 28);
 ALTER TABLE plans ADD COLUMN estimated_maintenance_calories INTEGER;
 ALTER TABLE plans ADD COLUMN planned_daily_deficit INTEGER;
+""",
+    4: """
+ALTER TABLE meal_items ADD COLUMN fiber REAL CHECK(fiber >= 0);
 """,
 }
 
@@ -157,6 +160,7 @@ CREATE TABLE IF NOT EXISTS meal_items (
     protein REAL CHECK(protein >= 0),
     fat REAL CHECK(fat >= 0),
     carbohydrates REAL CHECK(carbohydrates >= 0),
+    fiber REAL CHECK(fiber >= 0),
     sodium REAL CHECK(sodium >= 0),
     confidence TEXT CHECK(confidence IN ('low','medium','high')),
     note TEXT

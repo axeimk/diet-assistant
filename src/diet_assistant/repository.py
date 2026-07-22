@@ -121,6 +121,7 @@ def add_meal(path: Path, data: dict[str, object]) -> dict[str, object]:
             "protein",
             "fat",
             "carbohydrates",
+            "fiber",
             "sodium",
             "confidence",
             "note",

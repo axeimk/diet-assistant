@@ -110,6 +110,26 @@ def test_sodium_recorded_and_totalled(db_path: Path) -> None:
     assert daily_summary(db_path, date(2026, 7, 20))["totals"]["sodium"] == 5.2
 
 
+def test_fiber_recorded_on_meal_and_items(db_path: Path) -> None:
+    meal = add_meal(
+        db_path,
+        {
+            "eaten_at": "2026-07-20T14:00:00+09:00",
+            "meal_type": "lunch",
+            "estimated_calories": 500,
+            "fiber": 4.2,
+            "items": [
+                {"name": "ご飯", "fiber": 0.5, "confidence": "high"},
+                {"name": "サラダ", "fiber": 3.7, "confidence": "medium"},
+            ],
+        },
+    )
+    assert meal["fiber"] == 4.2
+    items = cast(list[dict[str, object]], meal["items"])
+    assert [item["fiber"] for item in items] == [0.5, 3.7]
+    assert daily_summary(db_path, date(2026, 7, 20))["totals"]["fiber"] == 4.2
+
+
 def test_negative_sodium_rejected(db_path: Path) -> None:
     with pytest.raises(sqlite3.IntegrityError):
         _ = add_meal(db_path, {"meal_type": "lunch", "sodium": -1})
@@ -143,7 +163,7 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
 
     applied = migrate(path)
 
-    assert applied == [2, 3]
+    assert applied == [2, 3, 4]
     assert schema_version(path) == SCHEMA_VERSION
     with connect(path) as connection:
         row = tuple(
@@ -157,7 +177,7 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
             )
         }
     assert row == (10, None), "既存の行は保持され、sodiumはNULLで埋まる"
-    assert "sodium" in item_columns
+    assert {"sodium", "fiber"} <= item_columns
     with connect(path) as connection:
         goal_columns = {
             cast(tuple[int, str], info)[1]
@@ -180,7 +200,7 @@ def test_initialize_migrates_existing_db(tmp_path: Path) -> None:
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
 
-    assert initialize(path) == [2, 3]
+    assert initialize(path) == [2, 3, 4]
     assert schema_version(path) == SCHEMA_VERSION
 
 
