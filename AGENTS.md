@@ -55,36 +55,8 @@ SQLiteを正本に食事・運動・体重・目標を長期記録し、CLIとAI
 - 写真削除は先に`diet photo cleanup`でdry-runし、明示的な承認後だけ`--apply`する。
 - DB更新にはトランザクションを使い、バックアップにはSQLite Backup APIを使う。
 
-## 「この画像を昼食として記録して」の標準手順
+## 定型作業
 
-1. 画像、撮影日時、ユーザーの補足文を確認する。
-2. 食品候補と量を範囲で推定し、パッケージ表示や申告値があれば優先する。
-3. 大きな不確実性があるか判定し、結果を大きく変える場合だけ質問する。
-4. `meal_type`、日時、食事全体の栄養範囲、確信度、品目、仮定を構造化JSONへ変換する。
-5. `diet meal add --json <file>`で登録する。SQLを直接実行しない。
-6. `diet meal show <id>`で再取得し、日時・区分・範囲・品目を検証する。
-7. `diet report daily --date YYYY-MM-DD --format json`で当日の累計を確認する。
-8. 登録結果と仮定を簡潔に説明し、必要な場合のみ短い助言を返す。
-
-構造化JSON例：
-
-```json
-{
-  "eaten_at": "2026-07-21T12:35:00+09:00",
-  "meal_type": "lunch",
-  "text": "ご飯は大盛り。唐揚げ5個。マヨネーズ少し。量は写真からの推定。",
-  "estimated_calories": 850,
-  "calories_min": 700,
-  "calories_max": 1000,
-  "protein": 32,
-  "fat": 35,
-  "carbohydrates": 100,
-  "sodium": 3.4,
-  "estimation_confidence": "medium",
-  "source": "codex",
-  "items": [
-    {"name": "ご飯", "amount_text": "大盛り", "confidence": "medium"},
-    {"name": "唐揚げ", "amount_text": "5個", "confidence": "high"}
-  ]
-}
-```
+- 食事の記録（写真・テキスト・申告のいずれも）はrecord-mealスキルの手順に従う。
+- 日次・週次レポートの作成はwrite-reportスキルの手順に従う。
+- 記録やレポートの依頼を受けたら、`config/profile.json`の`routine`（実施順のルーティーン）と当日の記録を照合し、抜けている先行ステップがあれば一言だけ確認する。詰問調にせず、「していない」という返答はそれで完結とする。`snack`は任意ステップなので、抜けていても確認しない。

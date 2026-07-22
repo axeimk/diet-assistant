@@ -8,5 +8,6 @@
   "allergies": [],
   "meals_per_day": 3,
   "advice_preference": "小さく継続可能な変更を優先",
+  "routine": ["weight", "breakfast", "lunch", "snack", "dinner", "report"],
   "photo_retention_days": 30
 }

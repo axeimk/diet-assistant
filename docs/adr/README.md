@@ -49,3 +49,4 @@
 | [0001](0001-migrations-in-code.md) | マイグレーションはコード内に持ち、`diet init`で適用する | 承認済み |
 | [0002](0002-profile-schema-as-source-of-truth.md) | プロフィールの形式はJSON Schemaを正本にし、検証は自作する | 承認済み |
 | [0003](0003-cap-calorie-deficit.md) | 摂取目標へ適用する赤字を暫定維持カロリーの25%までに制限する | 承認済み |
+| [0004](0004-routine-as-ordered-steps.md) | ルーティーンは時刻でなく順序で持ち、照合はエージェントが行う | 承認済み |

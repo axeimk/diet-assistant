@@ -54,6 +54,14 @@
       "type": "string",
       "description": "助言の方針。エージェントが読む自由記述。"
     },
+    "routine": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["weight", "breakfast", "lunch", "snack", "dinner", "exercise", "report"]
+      },
+      "description": "1日のルーティーンを実施順で並べたもの。時刻ではなく順序で管理する。エージェントが記録の依頼を受けたとき、先行ステップの記録抜けを確認するために読む。コードからは参照しない。"
+    },
     "photo_retention_days": {
       "type": "integer",
       "minimum": 1,

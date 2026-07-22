@@ -66,9 +66,12 @@ diet profile validate
 | `dietary_restrictions` | 文字列の配列 | 助言の文脈 |
 | `allergies` | 文字列の配列 | 助言の文脈 |
 | `advice_preference` | 文字列（自由記述） | 助言の方針 |
+| `routine` | ステップ名の配列 | 1日のルーティーン（実施順）。記録・レポート時に先行ステップの抜けを確認 |
 | `timezone` | IANAタイムゾーン名 | **現在は未使用**。日時はOSのタイムゾーンで扱う |
 
 `height_cm`・`birth_date`・`sex`・`activity_level`が揃い、`sex`が`female`または`male`なら、目標の追加・再計算時にMifflin–St Jeor式で暫定維持カロリーを計算します。`meals_per_day`は食事登録後の目安、`photo_retention_days`は写真整理に使います。食事制限・アレルギー・助言方針はエージェントが助言を組み立てるときの文脈です。
+
+`routine`は1日のステップ（`weight`・`breakfast`・`lunch`・`snack`・`dinner`・`exercise`・`report`）を実施順に並べたものです。時刻は持ちません。設定しておくと、エージェントが記録やレポートの依頼を受けたときに当日の記録と照合し、先行ステップに抜けがあれば「朝食はどうでしたか？」のように一言だけ確認します。`snack`は食べない日があるのが普通なので、抜けていても確認されません。CLIのコードは参照せず、エージェントだけが読みます。
 
 形式の正本は[`src/diet_assistant/profile.schema.json`](src/diet_assistant/profile.schema.json)（JSON Schema draft 2020-12）です。`diet profile validate`はこのスキーマで検証し、VS Codeでは`config/profile.json`の編集中に補完と警告が効きます。未知のキーはタイプミス検出のためエラーになります。
 

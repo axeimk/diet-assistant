@@ -54,3 +54,14 @@ def test_array_items_are_checked() -> None:
 
 def test_boolean_is_not_accepted_as_number() -> None:
     assert validate_profile({"height_cm": True}) != []
+
+
+def test_routine_accepts_known_steps_in_any_order() -> None:
+    steps = ["weight", "breakfast", "lunch", "snack", "dinner", "report"]
+    assert validate_profile({"routine": steps}) == []
+
+
+def test_routine_rejects_unknown_step() -> None:
+    errors = validate_profile({"routine": ["breakfast", "朝食"]})
+    assert len(errors) == 1
+    assert "routine[1]" in errors[0]
