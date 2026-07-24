@@ -45,8 +45,8 @@ CLI / Codex / iPhone inbox JSON
 
 ## CLI設計
 
-要求された`init`、`doctor`、`profile`、`goal`、`meal`、`exercise`、`metric`、`inbox`、`report`、`advice`、`backup`、`photo`の全コマンド群を設ける。出力は原則JSONで、失敗はJSONを標準エラーへ出して終了コード2を返す。レポートはMarkdown保存またはJSON出力に対応する。破壊的な食事・運動削除は`--yes`、写真削除は`--apply`が必要。
+要求された`init`、`doctor`、`profile`、`goal`、`meal`、`exercise`、`metric`、`inbox`、`report`、`advice`、`backup`、`photo`の全コマンド群を設ける。出力は原則JSONで、失敗はJSONを標準エラーへ出して終了コード2を返す。レポートはMarkdown保存、JSON出力、Chart.jsを埋め込んだ自己完結HTMLの保存に対応する。HTMLは生成後に既定ブラウザで開き、`--no-open`で起動を抑止できる。破壊的な食事・運動削除は`--yes`、写真削除は`--apply`が必要。
 
 ## MVPと将来拡張
 
-MVPは手動・JSON入力、inbox取り込み、CRUD、目標ペース、プロフィールから求める暫定維持カロリーと摂取目標、評価期間の平均体重による目標判定、日次・週次集計、定型助言、レポート、バックアップ、写真整理を扱う。画像認識API、食品データベース連携、実績トレンドによる維持カロリー補正、YAML読込、Web/モバイルUI、クラウド同期は将来拡張とする。
+MVPは手動・JSON入力、inbox取り込み、CRUD、目標ペース、プロフィールから求める暫定維持カロリーと摂取目標、評価期間の平均体重による目標判定、日次・週次集計、定型助言、静的HTMLを含むレポート、バックアップ、写真整理を扱う。画像認識API、食品データベース連携、実績トレンドによる維持カロリー補正、YAML読込、動的なWeb/モバイルアプリ、クラウド同期は将来拡張とする。

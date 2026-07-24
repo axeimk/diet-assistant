@@ -12,7 +12,7 @@ SQLiteを正本に、食事・運動・体重・目標を長期間記録し、AI
 
 ```
 あなた ──依頼──> エージェント ──diet CLI──> SQLite (data/diet.db)
-                                              └─> Markdownレポート (reports/)
+                                              └─> Markdown / HTMLレポート (reports/)
 ```
 
 ## 前提
@@ -28,7 +28,10 @@ SQLiteを正本に、食事・運動・体重・目標を長期間記録し、AI
 - **uv**（推奨）。標準の`venv`＋`pip`でも構いません。
 - **iCloud Drive と iPhoneのショートカットApp**。[iPhoneから記録する](#iphoneから記録する)場合だけ必要です。
 
-実行時の外部パッケージ依存はありません。DBはPython標準の`sqlite3`を使い、ネットワーク接続も不要です（エージェント自体の通信を除く）。開発用の`pytest`・`ruff`・`basedpyright`は`.[dev]`でまとめて入ります。
+実行時はHTMLテンプレートの生成にJinja2を使います。DBはPython標準の`sqlite3`を使い、
+グラフ用のChart.jsはパッケージに同梱するため、ネットワーク接続は不要です
+（エージェント自体の通信を除く）。開発用の`pytest`・`ruff`・`basedpyright`は`.[dev]`で
+まとめて入ります。
 
 ## セットアップ（初回だけ）
 
@@ -126,7 +129,19 @@ diet profile validate
 今週どうだった？
 ```
 
-食事登録後は、その日の摂取目標に対する残量、残り食数、次の食事の目安を返します。日次は食事・推定範囲・栄養素・運動・体重・目標に基づく助言・達成判定を、週次は7日平均・前週差・運動・体重・データ不足・最優先行動を出します。Markdownが`reports/daily/`と`reports/weekly/`に残ります（Git管理外）。
+食事登録後は、その日の摂取目標に対する残量、残り食数、次の食事の目安を返します。日次は食事・推定範囲・栄養素・運動・体重・目標に基づく助言・達成判定を、週次は7日平均・前週差・運動・体重・データ不足・最優先行動を出します。既定ではMarkdownが`reports/daily/`と`reports/weekly/`に残ります（Git管理外）。
+
+ブラウザでグラフ付きのレポートを見る場合は、HTML形式を指定します。CSS・JavaScript・データを
+埋め込んだ単一ファイルを生成し、既定ブラウザで開きます。日次は直近28日、週次は直近12週間の
+カロリー・体重・運動の推移を表示します。
+
+```bash
+diet report daily --format html
+diet report weekly --format html
+```
+
+ブラウザを開かず生成だけ行う場合は`--no-open`を追加します。未記録の日は0として扱わず、
+週平均カロリーは食事記録のある日だけから算出します。
 
 食事登録後と日次の助言は当日の状況を案内し、週次の助言は7日平均と直前7日との差を重視します。1日の超過を翌日の極端な制限で相殺するような提案はしません。行動変更は原則1つに絞って提示されます。
 
@@ -228,7 +243,7 @@ DB、画像、プロフィール、バックアップ、生成レポート、環
 | `metric`          | `add` `list` `show` `update` `delete`                          |
 | `goal`            | `add` `list` `show` `activate` `recalculate` `evaluate` `update` `delete` |
 | `inbox`           | `import` `list` `retry`                                        |
-| `report`          | `daily` `weekly`（`--date` `--format json`）                   |
+| `report`          | `daily` `weekly`（`--date` `--format markdown/json/html` `--stdout` `--no-open`） |
 | `advice`          | `today` `weekly`（`--date`）                                   |
 | `backup`          | `create` `list`                                                |
 | `photo`           | `cleanup`（`--days` `--apply`）                                |
@@ -250,6 +265,7 @@ diet goal add --start-weight 91 --target-weight 87 --success-threshold-weight 88
   --evaluation-window-days 7 --target-date 2026-08-21 --activate
 diet goal evaluate 1 --date 2026-08-21
 diet report weekly --date 2026-07-21 --format json
+diet report weekly --date 2026-07-21 --format html
 ```
 
 `--sodium`は**食塩相当量（g）**です。ナトリウム量（mg）ではありません。

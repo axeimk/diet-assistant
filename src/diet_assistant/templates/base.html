@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{ title }}</title>
+  <style>{{ report_css | safe }}</style>
+</head>
+<body>
+  <header class="page-header">
+    <div class="page-header__inner">
+      <p class="eyebrow">Diet Assistant</p>
+      <h1>{{ title }}</h1>
+      {% block header_detail %}{% endblock %}
+    </div>
+  </header>
+  <main class="page-shell">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="page-footer">
+    <p>単日の値だけでなく、継続的な傾向を見て判断しましょう。</p>
+  </footer>
+  <script id="report-data" type="application/json">{{ {"kind": report_kind, "trend": trend} | tojson }}</script>
+  <script>{{ chart_js | safe }}</script>
+  <script>{{ report_js | safe }}</script>
+</body>
+</html>

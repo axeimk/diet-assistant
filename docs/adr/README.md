@@ -51,3 +51,5 @@
 | [0003](0003-cap-calorie-deficit.md) | 摂取目標へ適用する赤字を暫定維持カロリーの25%までに制限する | 承認済み |
 | [0004](0004-routine-as-ordered-steps.md) | ルーティーンは時刻でなく順序で持ち、照合はエージェントが行う | 承認済み |
 | [0005](0005-report-day-start-time.md) | レポート日はプロフィールの一日開始時刻から導出する | 承認済み |
+| [0006](0006-html-reports-as-static-files-with-chartjs.md) | HTMLレポートはChart.jsを埋め込んだ単一の静的ファイルとして生成する | 承認済み |
+| [0007](0007-unrecorded-values-are-missing.md) | 未記録の値をゼロとして集計しない | 承認済み |

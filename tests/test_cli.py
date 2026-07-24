@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import cast
 
-from pytest import CaptureFixture
+from pytest import CaptureFixture, MonkeyPatch
 
 from diet_assistant.cli import main
 from diet_assistant.db import connect
@@ -163,6 +163,193 @@ def test_meal_and_daily_report_include_goal_based_advice(
     goal_evaluation = cast(dict[str, object], report_output["goal_evaluation"])
     assert daily_evidence["consumed_calories"] == 600
     assert goal_evaluation["evaluation_window_days"] == 7
+
+
+def test_daily_report_generates_self_contained_html(
+    tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    root_args = ["--root", str(tmp_path)]
+    assert main([*root_args, "init"]) == 0
+    _ = capsys.readouterr()
+    assert (
+        main(
+            [
+                *root_args,
+                "meal",
+                "add",
+                "--type",
+                "lunch",
+                "--text",
+                "<script>alert('xss')</script>",
+                "--at",
+                "2026-07-21T12:00:00+09:00",
+                "--calories",
+                "650",
+                "--calories-min",
+                "550",
+                "--calories-max",
+                "750",
+            ]
+        )
+        == 0
+    )
+    _ = capsys.readouterr()
+
+    assert (
+        main(
+            [
+                *root_args,
+                "report",
+                "daily",
+                "--date",
+                "2026-07-21",
+                "--format",
+                "html",
+                "--no-open",
+            ]
+        )
+        == 0
+    )
+    output = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
+    report_path = Path(cast(str, output["path"]))
+    html = report_path.read_text(encoding="utf-8")
+
+    assert report_path == tmp_path / "reports/daily/2026-07-21.html"
+    assert "<!doctype html>" in html.lower()
+    assert "日次レポート" in html
+    assert 'id="calorie-chart"' in html
+    assert 'id="weight-chart"' in html
+    assert 'id="exercise-chart"' in html
+    assert "<script>alert('xss')</script>" not in html
+    assert "&lt;script&gt;alert" in html
+    assert 'src="http' not in html
+
+
+def test_weekly_report_generates_html_with_daily_table(
+    tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    root_args = ["--root", str(tmp_path)]
+    assert main([*root_args, "init"]) == 0
+    _ = capsys.readouterr()
+
+    assert (
+        main(
+            [
+                *root_args,
+                "report",
+                "weekly",
+                "--date",
+                "2026-07-21",
+                "--format",
+                "html",
+                "--no-open",
+            ]
+        )
+        == 0
+    )
+    output = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
+    report_path = Path(cast(str, output["path"]))
+    html = report_path.read_text(encoding="utf-8")
+
+    assert report_path == tmp_path / "reports/weekly/2026-07-21.html"
+    assert "直近12週間の推移" in html
+    assert "対象週の日別記録" in html
+    assert html.count("<tbody>") == 1
+    assert html.count("<tr>") == 8
+
+
+def test_html_stdout_does_not_save_or_open_browser(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    root_args = ["--root", str(tmp_path)]
+    assert main([*root_args, "init"]) == 0
+    _ = capsys.readouterr()
+    opened_urls: list[str] = []
+
+    def record_open(url: str) -> bool:
+        opened_urls.append(url)
+        return True
+
+    monkeypatch.setattr("diet_assistant.cli.webbrowser.open", record_open)
+
+    assert (
+        main(
+            [
+                *root_args,
+                "report",
+                "daily",
+                "--date",
+                "2026-07-21",
+                "--format",
+                "html",
+                "--stdout",
+            ]
+        )
+        == 0
+    )
+    output = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
+
+    assert "<!doctype html>" in cast(str, output["html"]).lower()
+    assert not (tmp_path / "reports/daily/2026-07-21.html").exists()
+    assert opened_urls == []
+
+
+def test_html_browser_failure_returns_warning(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    root_args = ["--root", str(tmp_path)]
+    assert main([*root_args, "init"]) == 0
+    _ = capsys.readouterr()
+
+    def fail_open(_url: str) -> bool:
+        return False
+
+    monkeypatch.setattr("diet_assistant.cli.webbrowser.open", fail_open)
+
+    assert (
+        main(
+            [
+                *root_args,
+                "report",
+                "daily",
+                "--date",
+                "2026-07-21",
+                "--format",
+                "html",
+            ]
+        )
+        == 0
+    )
+    output = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
+
+    assert output["opened"] is False
+    assert "warning" in output
+    assert Path(cast(str, output["path"])).exists()
+
+
+def test_markdown_reports_do_not_show_unrecorded_exercise_as_zero(
+    tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    root_args = ["--root", str(tmp_path)]
+    assert main([*root_args, "init"]) == 0
+    _ = capsys.readouterr()
+
+    assert main([*root_args, "report", "daily", "--date", "2026-07-21"]) == 0
+    _ = capsys.readouterr()
+    daily = (tmp_path / "reports/daily/2026-07-21.md").read_text(encoding="utf-8")
+    assert "- 摂取カロリー: 記録なし" in daily
+    assert "- 運動時間: 記録なし" in daily
+    assert "- 体重: 記録なし" in daily
+
+    assert main([*root_args, "report", "weekly", "--date", "2026-07-21"]) == 0
+    _ = capsys.readouterr()
+    weekly = (tmp_path / "reports/weekly/2026-07-21.md").read_text(encoding="utf-8")
+    assert "- 平均摂取カロリー: 算出不可" in weekly
+    assert "- 記録された運動時間: 記録なし" in weekly
 
 
 def test_metric_crud(tmp_path: Path, capsys: CaptureFixture[str]) -> None:

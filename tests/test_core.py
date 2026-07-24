@@ -321,6 +321,61 @@ def test_daily_and_moving_averages(db_path: Path) -> None:
     assert weekly["recorded_meal_days"] == 7
 
 
+def test_period_average_calories_excludes_unrecorded_days(db_path: Path) -> None:
+    _ = add_meal(
+        db_path,
+        {
+            "eaten_at": "2026-07-21T12:00:00+09:00",
+            "meal_type": "lunch",
+            "estimated_calories": 1400,
+        },
+    )
+
+    summary = period_summary(db_path, date(2026, 7, 21), 7)
+
+    assert summary["average_calories"] == 1400
+    assert summary["recorded_meal_days"] == 1
+
+
+def test_daily_summary_uses_target_that_applied_on_report_date(db_path: Path) -> None:
+    goal_id = insert(
+        db_path,
+        "goals",
+        {
+            "started_at": "2026-07-01",
+            "target_date": "2026-10-01",
+            "start_weight": 80,
+            "target_weight": 74,
+            "target_type": "weight_loss",
+            "status": "active",
+            "created_at": "2026-07-01T08:00:00+09:00",
+        },
+    )
+    for calculated_at, target, status in (
+        ("2026-07-01T08:00:00+09:00", 1800, "superseded"),
+        ("2026-07-20T08:00:00+09:00", 1600, "active"),
+    ):
+        _ = insert(
+            db_path,
+            "plans",
+            {
+                "goal_id": goal_id,
+                "calculated_at": calculated_at,
+                "target_daily_calories": target,
+                "target_weekly_weight_change": -0.5,
+                "assumptions": "{}",
+                "weekly_actions": "[]",
+                "status": status,
+            },
+        )
+
+    before_change = daily_summary(db_path, date(2026, 7, 15))
+    after_change = daily_summary(db_path, date(2026, 7, 21))
+
+    assert before_change["target_daily_calories"] == 1800
+    assert after_change["target_daily_calories"] == 1600
+
+
 def test_daily_summary_uses_configured_day_start(db_path: Path) -> None:
     _ = add_meal(
         db_path,

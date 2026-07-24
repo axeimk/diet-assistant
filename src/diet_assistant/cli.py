@@ -5,6 +5,7 @@ import json
 import sqlite3
 import sys
 import uuid
+import webbrowser
 from datetime import date, datetime, time
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from .repository import (
     update,
 )
 from .services.advice import generate_advice, generate_daily_advice, generate_meal_advice
+from .services.html_reporting import daily_html, daily_trend, weekly_html, weekly_trend
 from .services.intake import import_directory, process_entry
 from .services.maintenance import cleanup_candidates, cleanup_photos, create_backup
 from .services.planning import evaluate_active_goal, evaluate_goal, save_plan
@@ -83,6 +85,7 @@ class CliArgs(argparse.Namespace):
     date: str | None = None
     format: str = "markdown"
     stdout: bool = False
+    no_open: bool = False
     days: int | None = None
     apply: bool = False
 
@@ -226,8 +229,9 @@ def build_parser() -> argparse.ArgumentParser:
     for action in ("daily", "weekly"):
         p = report.add_parser(action)
         _ = p.add_argument("--date")
-        _ = p.add_argument("--format", choices=["markdown", "json"], default="markdown")
+        _ = p.add_argument("--format", choices=["markdown", "json", "html"], default="markdown")
         _ = p.add_argument("--stdout", action="store_true")
+        _ = p.add_argument("--no-open", action="store_true")
     advice = commands.add_parser("advice").add_subparsers(dest="action", required=True)
     for action in ("today", "weekly"):
         p = advice.add_parser(action)
@@ -558,20 +562,49 @@ def _report(args: CliArgs, p: dict[str, Path]) -> object:
         )
         if args.format == "json":
             return {**summary, "advice": advice, "goal_evaluation": goal_evaluation}
-        content = daily_markdown(summary, advice, goal_evaluation)
-        output = p["daily"] / f"{day}.md"
+        if args.format == "html":
+            content = daily_html(
+                summary,
+                advice,
+                goal_evaluation,
+                daily_trend(p["db"], day, day_start=day_start),
+            )
+            output = p["daily"] / f"{day}.html"
+        else:
+            content = daily_markdown(summary, advice, goal_evaluation)
+            output = p["daily"] / f"{day}.md"
     else:
         summary = weekly_summary(p["db"], day, day_start=day_start)
         advice = generate_advice(p["db"], day, 7, day_start=day_start)
         if args.format == "json":
             return {"summary": summary, "advice": advice}
-        content = weekly_markdown(summary, advice)
-        output = p["weekly"] / f"{day}.md"
+        if args.format == "html":
+            content = weekly_html(
+                summary,
+                advice,
+                weekly_trend(p["db"], day, day_start=day_start),
+            )
+            output = p["weekly"] / f"{day}.html"
+        else:
+            content = weekly_markdown(summary, advice)
+            output = p["weekly"] / f"{day}.md"
     if args.stdout:
-        return {"markdown": content}
+        return {args.format: content}
     output.parent.mkdir(parents=True, exist_ok=True)
     _ = output.write_text(content, encoding="utf-8")
-    return {"path": str(output)}
+    result: dict[str, object] = {"path": str(output)}
+    if args.format == "html":
+        result["opened"] = False
+        if not args.no_open:
+            try:
+                opened = webbrowser.open(output.resolve().as_uri())
+            except (OSError, webbrowser.Error) as exc:
+                result["warning"] = f"ブラウザを開けませんでした: {exc}"
+            else:
+                result["opened"] = opened
+                if not opened:
+                    result["warning"] = "ブラウザを開けませんでした。pathのファイルを開いてください"
+    return result
 
 
 def _report_date(value: str | None, day_start: time) -> date:

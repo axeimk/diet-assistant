@@ -72,6 +72,7 @@ class PeriodSummary(TypedDict):
     average_weight: float | None
     weight_measurements: int
     recorded_meal_days: int
+    recorded_exercise_days: int
     daily: list[DailySummary]
     previous_week: NotRequired[dict[str, float | None]]
     changes: NotRequired[Changes]
@@ -109,7 +110,9 @@ def daily_summary(path: Path, day: date, *, day_start: time = time.min) -> Daily
             sqlite3.Row | None,
             connection.execute(
                 "SELECT p.* FROM plans p JOIN goals g ON g.id=p.goal_id "
-                + "WHERE g.status='active' AND p.status='active' ORDER BY p.id DESC LIMIT 1"
+                + "WHERE p.calculated_at <= ? AND g.started_at <= ? "
+                + "ORDER BY p.calculated_at DESC, p.id DESC LIMIT 1",
+                (end, day.isoformat()),
             ).fetchone(),
         )
 
@@ -151,7 +154,7 @@ def period_summary(
         daily_summary(path, start_day + timedelta(days=i), day_start=day_start)
         for i in range(days)
     ]
-    calories = [entry["totals"]["estimated_calories"] for entry in daily]
+    calories = [entry["totals"]["estimated_calories"] for entry in daily if entry["meals"]]
     weights = [
         entry["metric"]["weight"]
         for entry in daily
@@ -166,6 +169,7 @@ def period_summary(
         "average_weight": round(statistics.fmean(weights), 2) if weights else None,
         "weight_measurements": len(weights),
         "recorded_meal_days": sum(bool(d["meals"]) for d in daily),
+        "recorded_exercise_days": sum(bool(d["exercises"]) for d in daily),
         "daily": daily,
     }
 
@@ -209,7 +213,12 @@ def daily_markdown(
     goal_evaluation: dict[str, object] | None = None,
 ) -> str:
     totals = summary["totals"]
-    weight = summary["metric"]["weight"] if summary["metric"] else "記録なし"
+    metric = summary["metric"]
+    weight_text = (
+        f"{metric['weight']} kg"
+        if metric is not None and metric["weight"] is not None
+        else "記録なし"
+    )
     difference = summary["difference_from_target"]
     difference_text: float | str
     if difference is not None:
@@ -252,6 +261,23 @@ def daily_markdown(
         if goal_evaluation
         else []
     )
+    if summary["meals"]:
+        calorie_lines = [
+            f"- 摂取カロリー: {totals['estimated_calories']} kcal "
+            + f"（範囲 {totals['calories_min']}〜{totals['calories_max']} kcal）",
+            f"- P/F/C/食物繊維: {totals['protein']}/{totals['fat']}/"
+            + f"{totals['carbohydrates']}/{totals['fiber']} g",
+            f"- 食塩相当量: {totals['sodium']} g",
+        ]
+    else:
+        calorie_lines = [
+            "- 摂取カロリー: 記録なし",
+            "- P/F/C/食物繊維: 記録なし",
+            "- 食塩相当量: 記録なし",
+        ]
+    exercise_text = (
+        f"{totals['exercise_minutes']}分" if summary["exercises"] else "記録なし"
+    )
     return "\n".join(
         [
             f"# 日次レポート {summary['date']}",
@@ -260,13 +286,9 @@ def daily_markdown(
             *meal_lines,
             "",
             "## 集計",
-            f"- 摂取カロリー: {totals['estimated_calories']} kcal "
-            + f"（範囲 {totals['calories_min']}〜{totals['calories_max']} kcal）",
-            f"- P/F/C/食物繊維: {totals['protein']}/{totals['fat']}/"
-            + f"{totals['carbohydrates']}/{totals['fiber']} g",
-            f"- 食塩相当量: {totals['sodium']} g",
-            f"- 運動時間: {totals['exercise_minutes']}分",
-            f"- 体重: {weight} kg",
+            *calorie_lines,
+            f"- 運動時間: {exercise_text}",
+            f"- 体重: {weight_text}",
             f"- 目標との差: {difference_text}",
             "",
             "## 短い助言",
@@ -285,6 +307,16 @@ def weekly_markdown(summary: PeriodSummary, advice: dict[str, object]) -> str:
     if changes is None:
         raise ValueError("週次集計にchangesがありません")
     average_weight = summary["average_weight"] or "算出不可"
+    average_calories = (
+        summary["average_calories"]
+        if summary["average_calories"] is not None
+        else "算出不可"
+    )
+    exercise_text = (
+        f"{summary['exercise_minutes']}分"
+        if summary["recorded_exercise_days"]
+        else "記録なし"
+    )
     missing: list[str] = []
     if summary["recorded_meal_days"] < 7:
         missing.append(f"食事記録 {7 - summary['recorded_meal_days']}日分")
@@ -294,8 +326,9 @@ def weekly_markdown(summary: PeriodSummary, advice: dict[str, object]) -> str:
         [
             f"# 週次レポート {summary['period_start']}〜{summary['period_end']}",
             "",
-            f"- 平均摂取カロリー: {summary['average_calories']} kcal/日",
-            f"- 総運動時間: {summary['exercise_minutes']}分",
+            f"- 平均摂取カロリー: {average_calories}"
+            + (" kcal/日" if summary["average_calories"] is not None else ""),
+            f"- 記録された運動時間: {exercise_text}",
             f"- 体重7日平均: {average_weight} kg",
             "- 前週との差（カロリー/体重）: "
             + f"{changes['average_calories']} kcal / {changes['average_weight']} kg",

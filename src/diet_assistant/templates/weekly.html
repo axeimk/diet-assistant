@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block header_detail %}
+<p class="page-header__summary">対象週の振り返りと、直近12週間の中期傾向</p>
+{% endblock %}
+
+{% block content %}
+{% set changes = summary.changes %}
+<section class="summary-grid" aria-label="対象週のサマリー">
+  <article class="summary-card">
+    <p class="summary-card__label">平均摂取カロリー</p>
+    <p class="summary-card__value">
+      {% if summary.average_calories is not none %}
+      {{ summary.average_calories | round(1) }} <span>kcal/日</span>
+      {% else %}
+      <span class="missing">算出不可</span>
+      {% endif %}
+    </p>
+    <p class="summary-card__note">食事記録 {{ summary.recorded_meal_days }}/7日</p>
+  </article>
+  <article class="summary-card">
+    <p class="summary-card__label">体重7日平均</p>
+    <p class="summary-card__value">
+      {% if summary.average_weight is not none %}
+      {{ summary.average_weight | round(2) }} <span>kg</span>
+      {% else %}
+      <span class="missing">算出不可</span>
+      {% endif %}
+    </p>
+    <p class="summary-card__note">測定 {{ summary.weight_measurements }}回</p>
+  </article>
+  <article class="summary-card">
+    <p class="summary-card__label">記録された運動時間</p>
+    <p class="summary-card__value">
+      {% if summary.recorded_exercise_days %}
+      {{ summary.exercise_minutes | round(1) }} <span>分</span>
+      {% else %}
+      <span class="missing">記録なし</span>
+      {% endif %}
+    </p>
+  </article>
+  <article class="summary-card">
+    <p class="summary-card__label">前週からの体重差</p>
+    <p class="summary-card__value">
+      {% if changes and changes.average_weight is not none %}
+      {{ "%+.2f" | format(changes.average_weight) }} <span>kg</span>
+      {% else %}
+      <span class="missing">算出不可</span>
+      {% endif %}
+    </p>
+  </article>
+</section>
+
+<section class="panel panel--accent">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">Next action</p>
+      <h2>来週の最優先行動</h2>
+    </div>
+  </div>
+  <p class="advice-lead">{{ advice.situation }}</p>
+  <p class="priority-action">{{ advice.priority_action }}</p>
+  <details>
+    <summary>代替案と計画変更を見る</summary>
+    <dl class="detail-list">
+      <div><dt>代替案</dt><dd>{{ advice.alternative }}</dd></div>
+      <div><dt>計画変更</dt><dd>{{ advice.plan_change }}</dd></div>
+      <div><dt>続けたい点</dt><dd>{{ advice.keep }}</dd></div>
+    </dl>
+  </details>
+</section>
+
+<section class="section-block" aria-labelledby="trend-heading">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">12-week trend</p>
+      <h2 id="trend-heading">直近12週間の推移</h2>
+    </div>
+    <p class="section-note">カロリーは4日以上、体重は3回以上の記録がある週だけ表示します。</p>
+  </div>
+  <div class="chart-grid">
+    <article class="panel chart-panel">
+      <h3>平均摂取カロリー</h3>
+      <p>食事を記録した日だけから算出した週平均</p>
+      <div class="chart-frame"><canvas id="calorie-chart">週平均摂取カロリーの推移グラフ</canvas></div>
+    </article>
+    <article class="panel chart-panel">
+      <h3>平均体重</h3>
+      <p>週3回以上測定した週の平均</p>
+      <div class="chart-frame"><canvas id="weight-chart">週平均体重の推移グラフ</canvas></div>
+    </article>
+    <article class="panel chart-panel chart-panel--wide">
+      <h3>運動時間</h3>
+      <p>週ごとに記録された運動時間の合計</p>
+      <div class="chart-frame chart-frame--short"><canvas id="exercise-chart">週の運動時間の推移グラフ</canvas></div>
+    </article>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">Daily detail</p>
+      <h2>対象週の日別記録</h2>
+    </div>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">日付</th>
+          <th scope="col">摂取カロリー</th>
+          <th scope="col">体重</th>
+          <th scope="col">運動時間</th>
+          <th scope="col">記録状況</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in summary.daily %}
+        <tr>
+          <th scope="row">{{ day.date }}</th>
+          <td>
+            {% if day.meals %}{{ day.totals.estimated_calories | round(1) }} kcal
+            {% else %}<span class="missing">記録なし</span>{% endif %}
+          </td>
+          <td>
+            {% if day.metric and day.metric.weight is not none %}{{ day.metric.weight | round(2) }} kg
+            {% else %}<span class="missing">記録なし</span>{% endif %}
+          </td>
+          <td>
+            {% if day.exercises %}{{ day.totals.exercise_minutes | round(1) }}分
+            {% else %}<span class="missing">記録なし</span>{% endif %}
+          </td>
+          <td>
+            <span class="status-chip">{{ "食事あり" if day.meals else "食事なし" }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="content-grid">
+  <article class="panel">
+    <h2>前週比較と目標ペース</h2>
+    <dl class="metric-list">
+      <div><dt>平均カロリー差</dt><dd>{{ changes.average_calories if changes and changes.average_calories is not none else "算出不可" }} kcal</dd></div>
+      <div><dt>平均体重差</dt><dd>{{ changes.average_weight if changes and changes.average_weight is not none else "算出不可" }} kg</dd></div>
+      <div><dt>目標ペース</dt><dd>{{ summary.target_weekly_weight_change if summary.target_weekly_weight_change is not none else "未設定" }} kg/週</dd></div>
+      <div><dt>実績との差</dt><dd>{{ summary.pace_difference if summary.pace_difference is not none else "算出不可" }} kg/週</dd></div>
+    </dl>
+  </article>
+  <article class="panel">
+    <h2>データ不足</h2>
+    <ul class="plain-list">
+      {% if summary.recorded_meal_days < 7 %}<li>食事記録 {{ 7 - summary.recorded_meal_days }}日分</li>{% endif %}
+      {% if summary.weight_measurements < 3 %}<li>体重（週3回未満）</li>{% endif %}
+      {% if summary.recorded_meal_days == 7 and summary.weight_measurements >= 3 %}<li>なし</li>{% endif %}
+    </ul>
+  </article>
+</section>
+{% endblock %}
