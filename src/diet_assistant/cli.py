@@ -17,9 +17,11 @@ from .repository import (
     add_meal,
     delete,
     get,
+    get_goal,
     get_meal,
     insert,
     list_rows,
+    soft_delete_goal,
     update,
 )
 from .services.advice import generate_advice, generate_daily_advice, generate_meal_advice
@@ -375,9 +377,9 @@ def _goal(args: CliArgs, db: Path, profile: dict[str, object]) -> object:
         goal = activate_goal(db, goal_id) if args.activate else get(db, "goals", goal_id)
         return {"goal": goal, "plan": save_plan(db, goal_id, profile=profile)}
     if args.action == "list":
-        return list_rows(db, "goals")
+        return list_rows(db, "goals", where="deleted_at IS NULL")
     if args.action == "show":
-        goal = get(db, "goals", args.id)
+        goal = get_goal(db, args.id)
         goal["plans"] = list_rows(db, "plans", where="goal_id = ?", params=(args.id,))
         return goal
     if args.action == "activate":
@@ -395,7 +397,7 @@ def _goal(args: CliArgs, db: Path, profile: dict[str, object]) -> object:
             and date.fromisoformat(require_str(data, "target_date")[:10]) <= date.today()
         ):
             raise ValueError("目標日は今日より後にしてください")
-        current = get(db, "goals", args.id)
+        current = get_goal(db, args.id)
         candidate = {**current, **data}
         start_weight = require_number(candidate, "start_weight")
         target_weight = require_number(candidate, "target_weight")
@@ -408,8 +410,8 @@ def _goal(args: CliArgs, db: Path, profile: dict[str, object]) -> object:
     if args.action == "delete":
         if not args.yes:
             raise ValueError("削除には --yes が必要です")
-        delete(db, "goals", args.id)
-        return {"deleted": args.id}
+        deleted = soft_delete_goal(db, args.id)
+        return {"deleted": args.id, "deleted_at": deleted["deleted_at"]}
     return save_plan(db, args.id, profile=profile)
 
 

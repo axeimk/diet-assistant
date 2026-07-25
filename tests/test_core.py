@@ -8,12 +8,22 @@ from typing import cast
 import pytest
 
 from diet_assistant.db import SCHEMA_VERSION, connect, initialize, migrate, schema_version
-from diet_assistant.repository import add_meal, get, insert
+from diet_assistant.repository import (
+    NotFoundError,
+    activate_goal,
+    add_meal,
+    get,
+    get_goal,
+    insert,
+    list_rows,
+    soft_delete_goal,
+)
 from diet_assistant.services.intake import import_file
 from diet_assistant.services.maintenance import cleanup_candidates, create_backup
 from diet_assistant.services.planning import (
     calculate_energy_targets,
     calculate_plan,
+    evaluate_active_goal,
     evaluate_goal,
     save_plan,
 )
@@ -163,7 +173,7 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
 
     applied = migrate(path)
 
-    assert applied == [2, 3, 4]
+    assert applied == [2, 3, 4, 5]
     assert schema_version(path) == SCHEMA_VERSION
     with connect(path) as connection:
         row = tuple(
@@ -185,7 +195,7 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
                 list[tuple[object, ...]], connection.execute("PRAGMA table_info(goals)").fetchall()
             )
         }
-    assert {"success_threshold_weight", "evaluation_window_days"} <= goal_columns
+    assert {"success_threshold_weight", "evaluation_window_days", "deleted_at"} <= goal_columns
 
 
 def test_migration_is_not_reapplied(tmp_path: Path) -> None:
@@ -200,7 +210,7 @@ def test_initialize_migrates_existing_db(tmp_path: Path) -> None:
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
 
-    assert initialize(path) == [2, 3, 4]
+    assert initialize(path) == [2, 3, 4, 5]
     assert schema_version(path) == SCHEMA_VERSION
 
 
@@ -240,6 +250,43 @@ def test_goal_pace_and_plan_history(db_path: Path) -> None:
         statuses = [row[0] for row in status_rows]
     assert first["plan_id"] != second["plan_id"]
     assert statuses == ["superseded", "active"]
+
+
+def test_goal_delete_is_logical_and_keeps_plans(db_path: Path) -> None:
+    goal_id = _goal(db_path)
+    _ = save_plan(db_path, goal_id, today=date(2026, 7, 21))
+    _ = activate_goal(db_path, goal_id)
+
+    deleted = soft_delete_goal(db_path, goal_id)
+
+    assert deleted["deleted_at"] is not None
+    assert deleted["status"] == "inactive", "削除した目標をactiveのまま残さない"
+    assert list_rows(db_path, "plans", where="goal_id = ?", params=(goal_id,)), (
+        "過去のレポートの根拠になるplanを消さない"
+    )
+
+
+def test_deleted_goal_is_hidden_from_goal_operations(db_path: Path) -> None:
+    goal_id = _goal(db_path)
+    _ = save_plan(db_path, goal_id, today=date(2026, 7, 21))
+    _ = soft_delete_goal(db_path, goal_id)
+
+    with pytest.raises(NotFoundError):
+        _ = get_goal(db_path, goal_id)
+    with pytest.raises(NotFoundError):
+        _ = activate_goal(db_path, goal_id)
+    with pytest.raises(NotFoundError):
+        _ = save_plan(db_path, goal_id, today=date(2026, 7, 22))
+    with pytest.raises(NotFoundError):
+        _ = soft_delete_goal(db_path, goal_id)
+
+
+def test_deleted_goal_is_not_evaluated_as_active(db_path: Path) -> None:
+    goal_id = _goal(db_path)
+    _ = activate_goal(db_path, goal_id)
+    _ = soft_delete_goal(db_path, goal_id)
+
+    assert evaluate_active_goal(db_path, evaluation_date=date(2026, 7, 22)) is None
 
 
 def test_energy_targets_from_profile_are_capped() -> None:

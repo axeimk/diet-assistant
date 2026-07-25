@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import cast
 
 from ..db import connect, transaction
-from ..repository import get, insert
+from ..repository import get_goal, insert
 from ..util import day_bounds, now_iso, optional_number, require_int, require_number, require_str
 
 KCAL_PER_KG = 7700
@@ -144,7 +144,7 @@ def save_plan(
     profile: dict[str, object] | None = None,
     today: date | None = None,
 ) -> dict[str, object]:
-    goal = get(path, "goals", goal_id)
+    goal = get_goal(path, goal_id)
     calculation = calculate_plan(goal, today=today)
     calculation_day = today or date.today()
     energy = calculate_energy_targets(
@@ -196,7 +196,7 @@ def evaluate_goal(
     day_start: time = time.min,
 ) -> dict[str, object]:
     """評価期間の体重平均で、挑戦目標と達成最低ラインを判定する。"""
-    goal = get(path, "goals", goal_id)
+    goal = get_goal(path, goal_id)
     target_date = date.fromisoformat(require_str(goal, "target_date")[:10])
     end_day = evaluation_date or min(date.today(), target_date)
     raw_window = goal.get("evaluation_window_days", 1)
@@ -274,7 +274,8 @@ def evaluate_active_goal(
         row = cast(
             sqlite3.Row | None,
             connection.execute(
-                "SELECT id FROM goals WHERE status='active' ORDER BY id DESC LIMIT 1"
+                "SELECT id FROM goals WHERE status='active' AND deleted_at IS NULL "
+                + "ORDER BY id DESC LIMIT 1"
             ).fetchone(),
         )
     if row is None:

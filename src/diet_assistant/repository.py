@@ -156,8 +156,27 @@ def get_meal(path: Path, meal_id: int) -> dict[str, object]:
     return meal
 
 
+def get_goal(path: Path, goal_id: int) -> dict[str, object]:
+    """論理削除されていない目標を取得する。削除済みは存在しないものとして扱う。"""
+    goal = get(path, "goals", goal_id)
+    if goal["deleted_at"] is not None:
+        raise NotFoundError(f"goals の id={goal_id} は削除済みです")
+    return goal
+
+
+def soft_delete_goal(path: Path, goal_id: int) -> dict[str, object]:
+    """目標を論理削除する。過去のレポートの根拠になるplansは残す。"""
+    _ = get_goal(path, goal_id)
+    with transaction(path) as connection:
+        _ = connection.execute(
+            "UPDATE goals SET deleted_at = ?, status = 'inactive' WHERE id = ?",
+            (now_iso(), goal_id),
+        )
+    return get(path, "goals", goal_id)
+
+
 def activate_goal(path: Path, goal_id: int) -> dict[str, object]:
-    _ = get(path, "goals", goal_id)
+    _ = get_goal(path, goal_id)
     with transaction(path) as connection:
         _ = connection.execute("UPDATE goals SET status = 'inactive' WHERE status = 'active'")
         _ = connection.execute("UPDATE goals SET status = 'active' WHERE id = ?", (goal_id,))

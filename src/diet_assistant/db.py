@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -83,6 +83,9 @@ ALTER TABLE plans ADD COLUMN planned_daily_deficit INTEGER;
     4: """
 ALTER TABLE meal_items ADD COLUMN fiber REAL CHECK(fiber >= 0);
 """,
+    5: """
+ALTER TABLE goals ADD COLUMN deleted_at TEXT;
+""",
 }
 
 
@@ -100,7 +103,8 @@ CREATE TABLE IF NOT EXISTS goals (
     status TEXT NOT NULL DEFAULT 'inactive'
         CHECK(status IN ('active','inactive','completed','cancelled')),
     note TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    deleted_at TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS one_active_goal ON goals(status) WHERE status = 'active';
 

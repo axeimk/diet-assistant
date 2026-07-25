@@ -4,7 +4,7 @@ Diet Assistantが正式な記録として使用するSQLiteデータベースの
 スキーマの正本は[`src/diet_assistant/db.py`](../src/diet_assistant/db.py)の
 `SCHEMA_SQL`と`MIGRATIONS`であり、この文書はその内容を読みやすくまとめたものです。
 
-- 現在のスキーマバージョン: `4`
+- 現在のスキーマバージョン: `5`
 - バージョン管理: `PRAGMA user_version`
 - 外部キー制約: 接続ごとに`PRAGMA foreign_keys = ON`
 - 日時: ISO 8601形式の`TEXT`。日時には原則としてタイムゾーンを含める
@@ -56,10 +56,14 @@ erDiagram
 | `status` | `TEXT` | 不可 | `inactive` | `active`、`inactive`、`completed`、`cancelled`のいずれか |
 | `note` | `TEXT` | 可 | `NULL` | 補足 |
 | `created_at` | `TEXT` | 不可 | なし | 作成日時 |
+| `deleted_at` | `TEXT` | 可 | `NULL` | 論理削除した日時。非`NULL`の目標は一覧・activate・評価から除外 |
 
 インデックス:
 
 - `one_active_goal`: `status = 'active'`だけを対象とする一意インデックス
+
+`goal delete`は物理削除ではなく`deleted_at`を立てる論理削除です（[ADR 0009](adr/0009-goal-deletion-is-logical.md)）。
+削除しても`plans`は残り、過去日のレポートはその計画を根拠として引き続き参照します。
 
 ## `plans`
 

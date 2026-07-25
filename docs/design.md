@@ -35,7 +35,7 @@ CLI / Codex / iPhone inbox JSON
 
 | テーブル | 役割 | 主な関係・制約 |
 |---|---|---|
-| `goals` | 体重目標 | partial unique indexでactiveは1件、達成最低ラインと1〜28日の評価期間を保持 |
+| `goals` | 体重目標 | partial unique indexでactiveは1件、達成最低ラインと1〜28日の評価期間を保持、削除は`deleted_at`による論理削除 |
 | `plans` | 再計算履歴 | goalに従属、暫定維持カロリーと摂取目標を保持、旧計画はsuperseded |
 | `meals` | 食事 | カロリー範囲とconfidenceを検査、`sodium`は食塩相当量g |
 | `meal_items` | 食事内訳 | meal削除時にcascade |

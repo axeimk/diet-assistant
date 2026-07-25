@@ -368,3 +368,79 @@ def test_metric_crud(tmp_path: Path, capsys: CaptureFixture[str]) -> None:
     assert main([*root_args, "metric", "update", str(metric_id), "--json", str(update_file)]) == 0
     assert json.loads(capsys.readouterr().out)["weight"] == 69.5
     assert main([*root_args, "metric", "delete", str(metric_id), "--yes"]) == 0
+
+
+def test_goal_delete_hides_goal_but_keeps_report_basis(
+    tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    root_args = ["--root", str(tmp_path)]
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _ = (config_dir / "profile.json").write_text(
+        json.dumps(
+            {
+                "height_cm": 175,
+                "birth_date": "1991-03-04",
+                "sex": "male",
+                "activity_level": "sedentary",
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert main([*root_args, "init"]) == 0
+    _ = capsys.readouterr()
+    target_date = (date.today() + timedelta(days=31)).isoformat()
+    assert (
+        main(
+            [
+                *root_args,
+                "goal",
+                "add",
+                "--start-weight",
+                "91",
+                "--target-weight",
+                "87",
+                "--target-date",
+                target_date,
+                "--activate",
+            ]
+        )
+        == 0
+    )
+    goal_output = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
+    goal_id = require_int(cast(dict[str, object], goal_output["goal"]), "id")
+
+    assert main([*root_args, "goal", "delete", str(goal_id), "--yes"]) == 0
+    deleted = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
+    assert deleted["deleted"] == goal_id
+    assert deleted["deleted_at"] is not None
+
+    assert main([*root_args, "goal", "list"]) == 0
+    listed = cast(list[dict[str, object]], cast(object, json.loads(capsys.readouterr().out)))
+    assert listed == [], "削除した目標は一覧に出さない"
+
+    assert main([*root_args, "goal", "show", str(goal_id)]) == 2
+    _ = capsys.readouterr()
+
+    with connect(tmp_path / "data/diet.db") as connection:
+        goal_row = cast(
+            tuple[str, str],
+            connection.execute(
+                "SELECT status, deleted_at FROM goals WHERE id = ?", (goal_id,)
+            ).fetchone(),
+        )
+        plan_count = cast(
+            tuple[int],
+            connection.execute(
+                "SELECT COUNT(*) FROM plans WHERE goal_id = ?", (goal_id,)
+            ).fetchone(),
+        )[0]
+    assert goal_row[0] == "inactive"
+    assert goal_row[1] is not None
+    assert plan_count == 1, "レポートの根拠になるplanは物理削除しない"
+
+    assert main([*root_args, "report", "daily", "--format", "json"]) == 0
+    report = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
+    assert report["target_daily_calories"] is not None, (
+        "削除した目標のplanでも、その日のレポートの根拠として引ける"
+    )
