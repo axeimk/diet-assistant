@@ -6,17 +6,18 @@ from datetime import date, time, timedelta
 from functools import cache
 from importlib.resources import files
 from pathlib import Path
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from .finding import Finding
+from .nutrition import NutrientComparison
 from .reporting import (
     NUTRIENT_LABELS,
     NUTRIENT_STATUS_LABELS,
     DailySummary,
     PeriodSummary,
-    findings_markdown,
+    findings_lines,
     nutrient_reference,
     period_summary,
 )
@@ -25,6 +26,72 @@ from .reporting import (
 # ただし点が数個だけの折れ線は傾向に見えないので、最低限の幅は残す。
 MIN_TREND_DAYS = 7
 MIN_TREND_WEEKS = 4
+
+
+class StatusBadge(TypedDict):
+    """状態の表示。色だけに意味を持たせないよう、必ず記号（mark）と語（label）を伴う。"""
+
+    tone: Literal["good", "warn", "muted"]
+    mark: Literal["check", "up", "down", "alert", "dash"]
+    label: str
+
+
+# 目標の達成判定。データ不足は良し悪しではないので色を付けない。
+_GOAL_OUTCOME_BADGES: dict[str, StatusBadge] = {
+    "challenge_achieved": {"tone": "good", "mark": "check", "label": "挑戦目標達成"},
+    "success_threshold_achieved": {
+        "tone": "good",
+        "mark": "check",
+        "label": "達成最低ライン達成",
+    },
+    "not_achieved": {"tone": "warn", "mark": "alert", "label": "未達"},
+    "insufficient_data": {"tone": "muted", "mark": "dash", "label": "データ不足"},
+}
+
+# findingsのペース判定と同じ許容。表示と分析で判定がずれないようにする。
+PACE_TOLERANCE = 0.1
+
+
+def nutrient_badge(comparison: NutrientComparison) -> StatusBadge:
+    status = comparison["status"]
+    label = NUTRIENT_STATUS_LABELS[status]
+    if status == "within":
+        return {"tone": "good", "mark": "check", "label": label}
+    return {"tone": "warn", "mark": "down" if status == "below" else "up", "label": label}
+
+
+def calorie_badge(summary: DailySummary) -> StatusBadge | None:
+    """摂取カロリーを計画の目標範囲と突き合わせる。範囲が無ければ判定しない。
+
+    下回りも「不足」として指摘する。無条件に達成と見せて過度な制限を促さない。
+    """
+    minimum = summary["target_calorie_range_min"]
+    maximum = summary["target_calorie_range_max"]
+    if not summary["meals"] or minimum is None or maximum is None:
+        return None
+    actual = summary["totals"]["estimated_calories"]
+    if actual > maximum:
+        return {"tone": "warn", "mark": "up", "label": "超過"}
+    if actual < minimum:
+        return {"tone": "warn", "mark": "down", "label": "不足"}
+    return {"tone": "good", "mark": "check", "label": "範囲内"}
+
+
+def goal_badge(goal_evaluation: dict[str, object] | None) -> StatusBadge | None:
+    outcome = goal_evaluation.get("outcome") if goal_evaluation else None
+    return _GOAL_OUTCOME_BADGES.get(outcome) if isinstance(outcome, str) else None
+
+
+def pace_badge(summary: PeriodSummary) -> StatusBadge | None:
+    """週の体重変化を計画のペースと比べる。目標ペースが無ければ判定しない。"""
+    target = summary.get("target_weekly_weight_change")
+    changes = summary.get("changes")
+    actual = changes["average_weight"] if changes else None
+    if target is None or actual is None:
+        return None
+    if actual > target + PACE_TOLERANCE:
+        return {"tone": "warn", "mark": "alert", "label": "計画より遅い"}
+    return {"tone": "good", "mark": "check", "label": "計画どおり"}
 
 
 class DailyTrendPoint(TypedDict):
@@ -170,10 +237,12 @@ def daily_html(
         feedback=feedback,
         goal_evaluation=goal_evaluation,
         trend=trend,
-        finding_lines=findings_markdown(findings),
+        finding_lines=findings_lines(findings),
         nutrient_labels=list(NUTRIENT_LABELS.items()),
         nutrient_reference=nutrient_reference,
-        nutrient_status_labels=NUTRIENT_STATUS_LABELS,
+        nutrient_badge=nutrient_badge,
+        calorie_badge=calorie_badge(summary),
+        goal_badge=goal_badge(goal_evaluation),
     )
 
 
@@ -191,7 +260,8 @@ def weekly_html(
         report_kind="weekly",
         summary=summary,
         feedback=feedback,
-        finding_lines=findings_markdown(findings),
+        finding_lines=findings_lines(findings),
+        pace_badge=pace_badge(summary),
         trend=trend,
     )
 

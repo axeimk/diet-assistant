@@ -3,10 +3,33 @@ from pathlib import Path
 from typing import Literal
 
 from diet_assistant.repository import add_meal, insert
-from diet_assistant.services.html_reporting import daily_html, daily_trend, weekly_trend
+from diet_assistant.services.finding import Finding
+from diet_assistant.services.html_reporting import (
+    daily_html,
+    daily_trend,
+    weekly_html,
+    weekly_trend,
+)
 from diet_assistant.services.nutrition import NutrientComparison
-from diet_assistant.services.reporting import daily_summary
+from diet_assistant.services.reporting import DailySummary, daily_summary, weekly_summary
 from diet_assistant.util import now_iso
+
+
+def _finding(kind: str, severity: Literal["info", "attention"]) -> Finding:
+    return {
+        "group": "calorie",
+        "kind": kind,
+        "severity": severity,
+        "actual": 2300.0,
+        "reference": 2100.0,
+        "reference_basis": "計画の摂取目標",
+        "unit": "kcal/日",
+        "period_days": 1,
+        "sample_days": 1,
+        "calorie_headroom": -200.0,
+        "resolution": "reduce",
+        "detail": {},
+    }
 
 
 def _comparison(
@@ -65,6 +88,143 @@ def _add_exercise(path: Path, performed_at: str, minutes: float) -> None:
     )
 
 
+def _figures(html: str) -> str:
+    """冒頭のサマリー部分だけを取り出す。CSSに含まれるクラス名を拾わないため。"""
+    return html.split('<section class="figures"', 1)[1].split("</section>", 1)[0]
+
+
+def _lunch_summary(db_path: Path, calories: float) -> DailySummary:
+    _ = add_meal(
+        db_path,
+        {
+            "eaten_at": "2026-07-21T12:00:00+09:00",
+            "meal_type": "lunch",
+            "estimated_calories": calories,
+        },
+    )
+    return daily_summary(db_path, date(2026, 7, 21))
+
+
+def test_daily_html_marks_calorie_difference_against_the_plan_range(
+    db_path: Path,
+) -> None:
+    summary = _lunch_summary(db_path, 2300)
+    summary["target_daily_calories"] = 2000
+    summary["target_calorie_range_min"] = 1900
+    summary["target_calorie_range_max"] = 2100
+    summary["difference_from_target"] = 300
+
+    figures = _figures(daily_html(summary, None, [], None, []))
+
+    assert 'class="status status--warn status--up">超過' in figures
+
+
+def test_daily_html_marks_calorie_difference_within_the_plan_range(
+    db_path: Path,
+) -> None:
+    summary = _lunch_summary(db_path, 2000)
+    summary["target_daily_calories"] = 2000
+    summary["target_calorie_range_min"] = 1900
+    summary["target_calorie_range_max"] = 2100
+    summary["difference_from_target"] = 0
+
+    figures = _figures(daily_html(summary, None, [], None, []))
+
+    assert 'class="status status--good status--check">範囲内' in figures
+
+
+def test_daily_html_marks_calorie_shortfall_as_attention(db_path: Path) -> None:
+    summary = _lunch_summary(db_path, 1200)
+    summary["target_daily_calories"] = 2000
+    summary["target_calorie_range_min"] = 1900
+    summary["target_calorie_range_max"] = 2100
+    summary["difference_from_target"] = -800
+
+    figures = _figures(daily_html(summary, None, [], None, []))
+
+    # 目標を大きく下回るのも指摘。無条件に「達成」と見せて過度な制限を促さない。
+    assert 'class="status status--warn status--down">不足' in figures
+
+
+def test_daily_html_leaves_calorie_difference_unmarked_without_a_range(
+    db_path: Path,
+) -> None:
+    summary = _lunch_summary(db_path, 2300)
+    summary["target_daily_calories"] = 2000
+    summary["difference_from_target"] = 300
+
+    figures = _figures(daily_html(summary, None, [], None, []))
+
+    assert 'class="status' not in figures
+
+
+def test_daily_html_marks_goal_outcome(db_path: Path) -> None:
+    summary = _lunch_summary(db_path, 2000)
+
+    def verdict(outcome: str) -> str:
+        html = daily_html(summary, None, [], {"outcome": outcome}, [])
+        return html.split("目標の達成判定", 1)[1].split("</section>", 1)[0]
+
+    assert 'class="status status--good status--check">挑戦目標達成' in verdict(
+        "challenge_achieved"
+    )
+    assert 'class="status status--warn status--alert">未達' in verdict("not_achieved")
+    assert 'class="status status--muted status--dash">データ不足' in verdict(
+        "insufficient_data"
+    )
+
+
+def test_daily_html_marks_low_confidence_meals_in_the_entry_list(
+    db_path: Path,
+) -> None:
+    _ = add_meal(
+        db_path,
+        {
+            "eaten_at": "2026-07-21T12:00:00+09:00",
+            "meal_type": "lunch",
+            "estimated_calories": 900,
+            "estimation_confidence": "low",
+        },
+    )
+    summary = daily_summary(db_path, date(2026, 7, 21))
+
+    html = daily_html(summary, None, [], None, [])
+
+    entries = html.split("<ol class=\"entries\">", 1)[1]
+    assert "確信度低" in entries
+
+
+def test_daily_html_separates_attention_findings_from_reference_ones(
+    db_path: Path,
+) -> None:
+    summary = _lunch_summary(db_path, 2000)
+    findings: list[Finding] = [
+        _finding("calorie_average_above_target", "attention"),
+        _finding("calorie_average_recorded", "info"),
+    ]
+
+    html = daily_html(summary, None, findings, None, [])
+
+    assert 'class="findings__item findings__item--attention"' in html
+    assert 'class="findings__item findings__item--info"' in html
+    assert "指摘" in html
+    assert "参考" in html
+
+
+def test_weekly_html_marks_the_pace_against_the_plan(db_path: Path) -> None:
+    summary = weekly_summary(db_path, date(2026, 7, 21))
+    summary["target_weekly_weight_change"] = -0.5
+
+    def pace(weekly_change: float) -> str:
+        summary["changes"] = {"average_calories": None, "average_weight": weekly_change}
+        return _figures(weekly_html(summary, None, [], []))
+
+    assert 'class="status status--good status--check">計画どおり' in pace(-0.6)
+    # findings と同じ +0.1 kg/週 の許容。境界はまだ「遅い」としない。
+    assert 'class="status status--good status--check">計画どおり' in pace(-0.4)
+    assert 'class="status status--warn status--alert">計画より遅い' in pace(-0.2)
+
+
 def test_daily_trend_preserves_missing_values_and_requires_three_weights(
     db_path: Path,
 ) -> None:
@@ -117,12 +277,9 @@ def test_daily_html_marks_each_nutrient_status(db_path: Path) -> None:
     html = daily_html(summary, None, [], None, [])
 
     nutrition = html.split("栄養集計", 1)[1]
-    assert 'class="nutrient nutrient--below"' in nutrition
-    assert 'class="nutrient nutrient--within"' in nutrition
-    assert 'class="nutrient nutrient--above"' in nutrition
-    assert "不足" in nutrition
-    assert "範囲内" in nutrition
-    assert "超過" in nutrition
+    assert 'class="status status--warn status--down">不足' in nutrition
+    assert 'class="status status--good status--check">範囲内' in nutrition
+    assert 'class="status status--warn status--up">超過' in nutrition
 
 
 def test_daily_html_omits_nutrient_status_without_reference(db_path: Path) -> None:
@@ -141,7 +298,7 @@ def test_daily_html_omits_nutrient_status_without_reference(db_path: Path) -> No
     html = daily_html(summary, None, [], None, [])
 
     nutrition = html.split("栄養集計", 1)[1]
-    assert "nutrient--" not in nutrition
+    assert 'class="status' not in nutrition
     assert "目安未設定" in nutrition
 
 

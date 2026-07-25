@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 
 {% block masthead_note %}対象週の振り返りと、直近{{ trend | length }}週間の中期傾向{% endblock %}
 
@@ -36,6 +37,9 @@
     <p class="figure__label">前週からの体重差</p>
     {% if changes and changes.average_weight is not none %}
     <p class="figure__value">{{ "%+.2f" | format(changes.average_weight) }}<span class="figure__unit">kg</span></p>
+    {% if pace_badge %}
+    <p class="figure__note">{{ ui.status(pace_badge) }}</p>
+    {% endif %}
     {% else %}
     <p class="figure__value"><span class="unrecorded">算出不可</span></p>
     {% endif %}
@@ -56,7 +60,10 @@
   </div>
   <ul class="findings">
     {% for line in finding_lines %}
-    <li>{{ line[2:] }}</li>
+    <li class="findings__item findings__item--{{ line.severity }}">
+      {% if line.mark %}<span class="findings__mark">{{ line.mark }}</span>{% endif %}
+      <span>{{ line.text }}</span>
+    </li>
     {% endfor %}
   </ul>
   {% if feedback %}

@@ -1,0 +1,5 @@
+{% macro status(badge) %}
+{% if badge %}
+<span class="status status--{{ badge.tone }} status--{{ badge.mark }}">{{ badge.label }}</span>
+{% endif %}
+{% endmacro %}

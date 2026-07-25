@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 
 {% block masthead_note %}当日の記録と、対象日を含む直近{{ trend | length }}日の傾向{% endblock %}
 
@@ -42,6 +43,9 @@
     <p class="figure__label">目標との差</p>
     {% if summary.difference_from_target is not none %}
     <p class="figure__value">{{ "{:+,.0f}".format(summary.difference_from_target) }}<span class="figure__unit">kcal</span></p>
+    {% if calorie_badge %}
+    <p class="figure__note">{{ ui.status(calorie_badge) }}</p>
+    {% endif %}
     {% elif not summary.meals %}
     <p class="figure__value"><span class="unrecorded">食事記録なし</span></p>
     {% else %}
@@ -64,7 +68,10 @@
   </div>
   <ul class="findings">
     {% for line in finding_lines %}
-    <li>{{ line[2:] }}</li>
+    <li class="findings__item findings__item--{{ line.severity }}">
+      {% if line.mark %}<span class="findings__mark">{{ line.mark }}</span>{% endif %}
+      <span>{{ line.text }}</span>
+    </li>
     {% endfor %}
   </ul>
 </section>
@@ -144,12 +151,17 @@
             <time>{{ meal.eaten_at[11:16] }}</time>
             <p class="entries__kind">{{ meal_type_labels.get(meal.meal_type, meal.meal_type) }}</p>
           </div>
-          <p class="entries__text">{{ meal.note or "（メモなし）" }}</p>
+          <p class="entries__text">
+            {{ meal.note or "（メモなし）" }}
+            {% if meal.estimation_confidence == "low" %}
+            {{ ui.status({"tone": "muted", "mark": "alert", "label": "確信度低"}) }}
+            {% endif %}
+          </p>
           <p class="entries__value">
             {% if meal.estimated_calories is not none %}
             {{ "{:,.0f}".format(meal.estimated_calories) }} kcal
             {% else %}
-            カロリー不明
+            <span class="note">カロリー不明</span>
             {% endif %}
           </p>
         </li>
@@ -167,13 +179,13 @@
         {% set comparison = summary.nutrients.get(name) if name in summary.recorded_nutrients else none %}
         <div>
           <dt>{{ label }}</dt>
-          <dd{% if comparison %} class="nutrient nutrient--{{ comparison.status }}"{% endif %}>
+          <dd{% if comparison %} class="nutrient"{% endif %}>
             {% if name not in summary.recorded_nutrients %}
             <span class="note">記録なし</span>
             {% elif comparison %}
             <span class="nutrient__amount">
               {{ "%.1f" | format(totals[name]) }} {{ comparison.unit }}
-              <span class="nutrient__status">{{ nutrient_status_labels[comparison.status] }}</span>
+              {{ ui.status(nutrient_badge(comparison)) }}
             </span>
             <span class="note">{{ nutrient_reference(comparison) }}</span>
             {% else %}
@@ -200,10 +212,7 @@
     <div>
       <dt>判定</dt>
       <dd>
-        {% if goal_evaluation.outcome == "insufficient_data" %}データ不足
-        {% elif goal_evaluation.outcome == "challenge_achieved" %}挑戦目標達成
-        {% elif goal_evaluation.outcome == "success_threshold_achieved" %}達成最低ライン達成
-        {% elif goal_evaluation.outcome == "not_achieved" %}未達
+        {% if goal_badge %}{{ ui.status(goal_badge) }}
         {% else %}{{ goal_evaluation.outcome }}{% endif %}
       </dd>
     </div>

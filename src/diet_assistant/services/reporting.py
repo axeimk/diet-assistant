@@ -60,11 +60,19 @@ class DailySummary(TypedDict):
     metric: MetricRecord | None
     totals: Totals
     target_daily_calories: float | None
+    target_calorie_range_min: float | None
+    target_calorie_range_max: float | None
     difference_from_target: float | None
     nutrient_targets: dict[str, NutrientTarget]
     nutrients: dict[str, NutrientComparison]
     recorded_nutrients: list[NutrientKey]
     uncertain_meal_ids: list[int]
+
+
+class FindingLine(TypedDict):
+    severity: Literal["info", "attention"]
+    mark: str | None
+    text: str
 
 
 class Changes(TypedDict):
@@ -132,6 +140,11 @@ def daily_summary(path: Path, day: date, *, day_start: time = time.min) -> Daily
     plan_record = cast(dict[str, object], dict(plan)) if plan else {}
     target_value = plan_record.get("target_daily_calories")
     target = float(target_value) if isinstance(target_value, (int, float)) else None
+
+    def plan_number(key: str) -> float | None:
+        value = plan_record.get(key)
+        return float(value) if isinstance(value, (int, float)) else None
+
     metric_record = cast(MetricRecord, cast(object, dict(metric))) if metric else None
     nutrient_target_map = plan_nutrient_targets(plan_record)
     # 未記録の栄養素はゼロではなく欠損として扱い、目安との比較対象から外す（ADR 0007）。
@@ -156,6 +169,8 @@ def daily_summary(path: Path, day: date, *, day_start: time = time.min) -> Daily
         "metric": metric_record,
         "totals": totals,
         "target_daily_calories": target,
+        "target_calorie_range_min": plan_number("target_calorie_range_min"),
+        "target_calorie_range_max": plan_number("target_calorie_range_max"),
         "difference_from_target": round(calories - target, 1) if target and meals else None,
         "nutrient_targets": nutrient_target_map,
         "nutrients": compare_nutrients(_recorded_totals(totals, recorded), nutrient_target_map),
@@ -315,11 +330,20 @@ _NUTRIENT_STATUS_SUFFIX = {
 
 def findings_markdown(findings: Sequence[Finding]) -> list[str]:
     """findingsを数値の箇条書きにする。フィードバックの文面ではなく事実だけを並べる。"""
-    return [_finding_line(finding) for finding in findings] or ["- 判断できる記録がありません"]
+    return [
+        f"- [{line['mark']}] {line['text']}" if line["mark"] else f"- {line['text']}"
+        for line in findings_lines(findings)
+    ]
 
 
-def _finding_line(finding: Finding) -> str:
-    mark = "指摘" if finding["severity"] == "attention" else "参考"
+def findings_lines(findings: Sequence[Finding]) -> list[FindingLine]:
+    """findingsの1行を、印と本文に分けて返す。HTMLは印を別の体裁で出す。"""
+    return [_finding_line(finding) for finding in findings] or [
+        {"severity": "info", "mark": None, "text": "判断できる記録がありません"}
+    ]
+
+
+def _finding_line(finding: Finding) -> FindingLine:
     unit = finding["unit"]
     notes: list[str] = []
     reference = finding["reference"]
@@ -331,10 +355,12 @@ def _finding_line(finding: Finding) -> str:
     if isinstance(meal_type, str) and isinstance(share, (int, float)):
         notes.append(f"{meal_type} が{round(float(share) * 100)}%")
     notes.append(f"{finding['sample_days']}日分")
-    return (
-        f"- [{mark}] {_finding_label(finding)}: "
-        + f"{_amount(finding['actual'])} {unit}（{'、'.join(notes)}）"
-    )
+    return {
+        "severity": finding["severity"],
+        "mark": "指摘" if finding["severity"] == "attention" else "参考",
+        "text": f"{_finding_label(finding)}: "
+        + f"{_amount(finding['actual'])} {unit}（{'、'.join(notes)}）",
+    }
 
 
 def _finding_label(finding: Finding) -> str:

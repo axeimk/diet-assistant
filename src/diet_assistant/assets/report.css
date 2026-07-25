@@ -304,6 +304,28 @@ table {
   border-top: 1px solid var(--rule);
 }
 
+/* 指摘と参考は色ではなく、印の濃さと本文の重みで分ける。行数が多いので色は載せない。 */
+.findings__item {
+  display: grid;
+  grid-template-columns: 2.6rem minmax(0, 1fr);
+  gap: 0 0.75rem;
+}
+
+.findings__mark {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+
+.findings__item--attention {
+  color: var(--ink);
+}
+
+.findings__item--attention .findings__mark {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .entries {
   list-style: none;
   padding: 0;
@@ -381,7 +403,56 @@ table {
   column-gap: 2.5rem;
 }
 
-/* 栄養素の達成状態。色だけに意味を持たせず、記号と語を必ず並べる。 */
+/* 状態の印。色だけに意味を持たせず、記号と語を必ず並べる。 */
+.status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.status::before {
+  margin-right: 0.25em;
+  font-weight: 400;
+}
+
+.status--good {
+  color: var(--status-good);
+}
+
+.status--warn {
+  color: var(--status-warn);
+}
+
+.status--muted {
+  color: var(--ink-muted);
+}
+
+.status--check::before {
+  content: "✓";
+}
+
+.status--up::before {
+  content: "↑";
+}
+
+.status--down::before {
+  content: "↓";
+}
+
+.status--alert::before {
+  content: "!";
+}
+
+.status--dash::before {
+  content: "—";
+}
+
+.figure__note .status {
+  font-size: 0.75rem;
+}
+
+/* 栄養素は「量」と「状態」を同じ行に、目安を次の行に置く。 */
 .nutrient {
   display: flex;
   flex-direction: column;
@@ -394,41 +465,8 @@ table {
   gap: 0.5rem;
 }
 
-.nutrient__status {
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
-.nutrient__status::before {
-  margin-right: 0.25em;
-  font-weight: 400;
-}
-
 .nutrient .note {
   line-height: 1.5;
-}
-
-.nutrient--within .nutrient__status {
-  color: var(--status-good);
-}
-
-.nutrient--within .nutrient__status::before {
-  content: "✓";
-}
-
-.nutrient--below .nutrient__status,
-.nutrient--above .nutrient__status {
-  color: var(--status-warn);
-}
-
-.nutrient--below .nutrient__status::before {
-  content: "↓";
-}
-
-.nutrient--above .nutrient__status::before {
-  content: "↑";
 }
 
 .pairs--spaced {
