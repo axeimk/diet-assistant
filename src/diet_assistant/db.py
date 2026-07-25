@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -133,6 +133,10 @@ ALTER TABLE advice_history_rebuilt RENAME TO advice_history;
 CREATE UNIQUE INDEX IF NOT EXISTS advice_history_key
     ON advice_history(advice_type, period_start, period_end, COALESCE(meal_id, 0));
 """,
+    # v1から書き込みも読み出しもされないまま残っていた列を落とす。
+    7: """
+ALTER TABLE plans DROP COLUMN protein_target;
+""",
 }
 
 
@@ -166,7 +170,6 @@ CREATE TABLE IF NOT EXISTS plans (
     planned_daily_deficit INTEGER,
     target_weekly_exercise_minutes INTEGER,
     target_weekly_weight_change REAL NOT NULL,
-    protein_target REAL,
     step_target INTEGER,
     assumptions TEXT NOT NULL,
     weekly_actions TEXT NOT NULL DEFAULT '[]',

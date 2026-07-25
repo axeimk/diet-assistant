@@ -177,7 +177,7 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
 
     applied = migrate(path)
 
-    assert applied == [2, 3, 4, 5, 6]
+    assert applied == [2, 3, 4, 5, 6, 7]
     assert schema_version(path) == SCHEMA_VERSION
     with connect(path) as connection:
         row = tuple(
@@ -200,6 +200,34 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
             )
         }
     assert {"success_threshold_weight", "evaluation_window_days", "deleted_at"} <= goal_columns
+
+
+def test_migration_drops_unused_protein_target(tmp_path: Path) -> None:
+    """読み書きされないまま残っていた plans.protein_target を落とす。"""
+    path = tmp_path / "data/diet.db"
+    _initialize_v1(path)
+    with connect(path) as connection:
+        with connection:
+            _ = connection.execute(
+                "INSERT INTO plans (goal_id, calculated_at, target_weekly_weight_change, "
+                + "protein_target, step_target, assumptions, weekly_actions, status) "
+                + "VALUES (1, '2026-07-20T09:00:00+09:00', -0.5, NULL, 8000, '{}', '[]', 'active')"
+            )
+
+    _ = migrate(path)
+
+    with connect(path) as connection:
+        plan_columns = {
+            cast(tuple[int, str], info)[1]
+            for info in cast(
+                list[tuple[object, ...]], connection.execute("PRAGMA table_info(plans)").fetchall()
+            )
+        }
+        row = cast(
+            sqlite3.Row, connection.execute("SELECT step_target, status FROM plans").fetchone()
+        )
+    assert "protein_target" not in plan_columns
+    assert tuple(row) == (8000, "active"), "既存の計画行は保持される"
 
 
 def _insert_v1_advice(
@@ -263,7 +291,7 @@ def test_initialize_migrates_existing_db(tmp_path: Path) -> None:
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
 
-    assert initialize(path) == [2, 3, 4, 5, 6]
+    assert initialize(path) == [2, 3, 4, 5, 6, 7]
     assert schema_version(path) == SCHEMA_VERSION
 
 

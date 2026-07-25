@@ -4,7 +4,7 @@ Diet Assistantが正式な記録として使用するSQLiteデータベースの
 スキーマの正本は[`src/diet_assistant/db.py`](../src/diet_assistant/db.py)の
 `SCHEMA_SQL`と`MIGRATIONS`であり、この文書はその内容を読みやすくまとめたものです。
 
-- 現在のスキーマバージョン: `5`
+- 現在のスキーマバージョン: `7`
 - バージョン管理: `PRAGMA user_version`
 - 外部キー制約: 接続ごとに`PRAGMA foreign_keys = ON`
 - 日時: ISO 8601形式の`TEXT`。日時には原則としてタイムゾーンを含める
@@ -82,7 +82,6 @@ erDiagram
 | `planned_daily_deficit` | `INTEGER` | 可 | `NULL` | 計画へ適用したエネルギー赤字（kcal/日） |
 | `target_weekly_exercise_minutes` | `INTEGER` | 可 | `NULL` | 週間運動時間の目標（分） |
 | `target_weekly_weight_change` | `REAL` | 不可 | なし | 週間体重変化の目標（kg/週）。減量は負数 |
-| `protein_target` | `REAL` | 可 | `NULL` | たんぱく質目標（g/日）。現在は未計算 |
 | `step_target` | `INTEGER` | 可 | `NULL` | 1日の歩数目標 |
 | `assumptions` | `TEXT` | 不可 | なし | 計算上の仮定を格納するJSONオブジェクト |
 | `weekly_actions` | `TEXT` | 不可 | `[]` | 週間行動を格納するJSON配列 |

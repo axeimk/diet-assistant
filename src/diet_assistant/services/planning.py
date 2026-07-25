@@ -174,7 +174,6 @@ def save_plan(
             "planned_daily_deficit": optional_number(energy, "planned_daily_deficit"),
             "target_weekly_exercise_minutes": calculation["target_weekly_exercise_minutes"],
             "target_weekly_weight_change": calculation["target_weekly_weight_change"],
-            "protein_target": None,
             "step_target": calculation["step_target"],
             "assumptions": json.dumps(
                 {**cast(dict[str, object], calculation["assumptions"]), "energy": energy},
