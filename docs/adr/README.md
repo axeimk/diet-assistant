@@ -56,3 +56,4 @@
 | [0008](0008-report-design-language.md) | HTMLレポートは面ではなく罫線で構造を作り、系列色は実測と参照の2色に固定する | 承認済み |
 | [0009](0009-goal-deletion-is-logical.md) | 目標の削除は論理削除にし、planは残す | 承認済み |
 | [0010](0010-advice-history-keeps-latest-only.md) | 助言は種別・期間ごとに最新1件だけを保持する | 承認済み |
+| [0011](0011-agent-read-only-profile-fields.md) | プロフィールにはエージェントだけが読む項目を置き、読む手順とセットで足す | 承認済み |

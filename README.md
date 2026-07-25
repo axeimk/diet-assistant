@@ -66,14 +66,16 @@ diet profile validate
 | `sex` | `female` / `male` / `unspecified` | 暫定維持カロリーの計算。`unspecified`では計算しない |
 | `activity_level` | `sedentary` / `light` / `moderate` / `active` / `very_active` | 暫定維持カロリーの活動係数 |
 | `meals_per_day` | 1〜10の整数 | 食事登録後に残り食数と1食あたりの目安を計算。**未設定なら3** |
-| `dietary_restrictions` | 文字列の配列 | 助言の文脈 |
-| `allergies` | 文字列の配列 | 助言の文脈 |
-| `advice_preference` | 文字列（自由記述） | 助言の方針 |
+| `dietary_restrictions` | 文字列の配列 | 食事記録時にエージェントが品目と照合し、該当しそうなら一言添える |
+| `allergies` | 文字列の配列 | 同上。断定せず「〜の可能性がある」と伝える |
+| `advice_preference` | 文字列（自由記述） | エージェントが自分の言葉で書く助言・コメントの方針 |
 | `routine` | ステップ名の配列 | 1日のルーティーン（実施順）。記録・レポート時に先行ステップの抜けを確認 |
 | `day_start_time` | `HH:MM` | レポート上の一日の開始時刻。開始前の記録は前日分に含める。**未設定なら00:00** |
 | `timezone` | IANAタイムゾーン名 | **現在は未使用**。日時はOSのタイムゾーンで扱う |
 
-`height_cm`・`birth_date`・`sex`・`activity_level`が揃い、`sex`が`female`または`male`なら、目標の追加・再計算時にMifflin–St Jeor式で暫定維持カロリーを計算します。`meals_per_day`は食事登録後の目安、`photo_retention_days`は写真整理に使います。食事制限・アレルギー・助言方針はエージェントが助言を組み立てるときの文脈です。
+`height_cm`・`birth_date`・`sex`・`activity_level`が揃い、`sex`が`female`または`male`なら、目標の追加・再計算時にMifflin–St Jeor式で暫定維持カロリーを計算します。`meals_per_day`は食事登録後の目安、`photo_retention_days`は写真整理に使います。
+
+`dietary_restrictions`・`allergies`・`advice_preference`は`routine`と同じく、CLIのコードではなくエージェントだけが読む項目です。食事を記録するとき、エージェントは推定した品目を食事制限とアレルギーに照合し、該当しそうなものがあれば記録はそのまま行ったうえで「衣に小麦が含まれている可能性があります」のように一言添えます（写真やメニュー名からは断定できないためです）。症状や対処には踏み込みません。`advice_preference`（例: 「まずは継続可能な変更を優先」）は、エージェントが自分の言葉で書く助言やコメントの方針です。`diet report`と`diet advice`がCLIで生成する文言はこの方針では書き換えません。
 
 `routine`は1日のステップ（`weight`・`breakfast`・`lunch`・`snack`・`dinner`・`exercise`・`report`）を実施順に並べたものです。時刻は持ちません。設定しておくと、エージェントが記録やレポートの依頼を受けたときに当日の記録と照合し、先行ステップに抜けがあれば「朝食はどうでしたか？」のように一言だけ確認します。`snack`は食べない日があるのが普通なので、抜けていても確認されません。CLIのコードは参照せず、エージェントだけが読みます。
 
