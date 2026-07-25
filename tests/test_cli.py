@@ -254,8 +254,12 @@ def test_weekly_report_generates_html_with_daily_table(
     assert report_path == tmp_path / "reports/weekly/2026-07-21.html"
     assert "直近12週間の推移" in html
     assert "対象週の日別記録" in html
-    assert html.count("<tbody>") == 1
-    assert html.count("<tr>") == 8
+    # 12週の数値表と対象週の日別表の2つ。日別表は対象週の7日分を並べる。
+    assert html.count("<tbody>") == 2
+    daily_table = html.split("対象週の日別記録", 1)[1]
+    assert daily_table.count("<tr>") == 8
+    for day in range(15, 22):
+        assert f'<th scope="row">2026-07-{day}</th>' in daily_table
 
 
 def test_html_stdout_does_not_save_or_open_browser(

@@ -8,55 +8,69 @@
 
   const report = JSON.parse(dataElement.textContent || "{}");
   const darkMode = window.matchMedia("(prefers-color-scheme: dark)");
-  const colors = darkMode.matches
+
+  // 実測 = 青、目標や移動平均などの参照系列 = 橙。両モードともCVD検証済み。
+  const palette = darkMode.matches
     ? {
-        text: "#eef7f1",
-        muted: "#a8b8ae",
-        grid: "rgba(168, 184, 174, 0.18)",
-        calorie: "#6fcba7",
-        range: "rgba(111, 203, 167, 0.15)",
-        target: "#e7b36b",
-        weight: "#83b4ed",
-        average: "#c09aea",
-        exercise: "#e49577",
+        surface: "#141413",
+        ink: "#f0eee6",
+        secondary: "#b4b0a4",
+        muted: "#8a8880",
+        grid: "#302f2b",
+        axis: "#4a4945",
+        measured: "#3987e5",
+        measuredWash: "rgba(57, 135, 229, 0.14)",
+        reference: "#d95926",
       }
     : {
-        text: "#17231d",
-        muted: "#637169",
-        grid: "rgba(99, 113, 105, 0.16)",
-        calorie: "#227a5a",
-        range: "rgba(34, 122, 90, 0.13)",
-        target: "#8b5d24",
-        weight: "#3569a8",
-        average: "#7449a5",
-        exercise: "#b35b3d",
+        surface: "#faf9f6",
+        ink: "#1b1a16",
+        secondary: "#57544c",
+        muted: "#8a867b",
+        grid: "#e6e3da",
+        axis: "#c9c5b8",
+        measured: "#2a78d6",
+        measuredWash: "rgba(42, 120, 214, 0.10)",
+        reference: "#eb6834",
       };
 
-  Chart.defaults.color = colors.muted;
+  Chart.defaults.color = palette.muted;
   Chart.defaults.font.family =
     '-apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif';
+  Chart.defaults.font.size = 11;
   Chart.defaults.plugins.legend.labels.usePointStyle = true;
-  Chart.defaults.plugins.legend.labels.boxWidth = 9;
+  Chart.defaults.plugins.legend.labels.boxWidth = 8;
+  Chart.defaults.plugins.legend.labels.boxHeight = 8;
 
-  const baseOptions = (unit, tooltipAfterBody) => ({
+  const baseOptions = ({ unit, showLegend, tooltipAfterBody }) => ({
     responsive: true,
     maintainAspectRatio: false,
-    interaction: {
-      mode: "index",
-      intersect: false,
-    },
-    animation: {
-      duration: 350,
-    },
+    layout: { padding: { top: 4, right: 2, bottom: 0, left: 0 } },
+    interaction: { mode: "index", intersect: false },
+    animation: { duration: 0 },
     plugins: {
       legend: {
+        display: showLegend,
         position: "bottom",
         align: "start",
         labels: {
-          padding: 18,
+          padding: 16,
+          color: palette.secondary,
+          // 推定範囲の帯は装飾であって系列ではないので凡例に出さない。
+          filter: (item, data) => !data.datasets[item.datasetIndex].chrome,
         },
       },
       tooltip: {
+        backgroundColor: palette.ink,
+        titleColor: palette.surface,
+        bodyColor: palette.surface,
+        cornerRadius: 2,
+        padding: 8,
+        displayColors: true,
+        boxWidth: 8,
+        boxHeight: 8,
+        usePointStyle: true,
+        filter: (item) => !item.dataset.chrome,
         callbacks: {
           label(context) {
             const value = context.parsed.y;
@@ -71,24 +85,20 @@
     },
     scales: {
       x: {
-        grid: {
-          display: false,
-        },
+        border: { color: palette.axis },
+        grid: { display: false },
         ticks: {
           maxRotation: 0,
           autoSkip: true,
           maxTicksLimit: 8,
+          padding: 6,
         },
       },
       y: {
         beginAtZero: unit !== "kg",
-        grid: {
-          color: colors.grid,
-        },
-        title: {
-          display: true,
-          text: unit,
-        },
+        border: { display: false },
+        grid: { color: palette.grid, drawTicks: false },
+        ticks: { padding: 8, maxTicksLimit: 6 },
       },
     },
   });
@@ -99,28 +109,65 @@
     borderColor: color,
     backgroundColor: color,
     borderWidth: 2,
-    pointRadius: 2.5,
+    borderCapStyle: "round",
+    borderJoinStyle: "round",
+    pointRadius: 0,
     pointHoverRadius: 5,
-    tension: 0.2,
+    pointHoverBorderWidth: 2,
+    pointHoverBorderColor: palette.surface,
+    tension: 0.15,
     spanGaps: false,
     ...extra,
   });
 
-  const buildLineChart = (id, labels, datasets, unit, tooltipAfterBody) => {
+  const dotDataset = (label, values, color, extra = {}) =>
+    lineDataset(label, values, color, {
+      showLine: false,
+      pointRadius: 4,
+      pointBorderWidth: 2,
+      pointBorderColor: palette.surface,
+      pointHoverRadius: 6,
+      ...extra,
+    });
+
+  const hasValue = (values) => values.some((value) => value !== null && value !== undefined);
+
+  // 記録が1件もない期間に空の格子だけを描いても何も伝わらないので、文で置き換える。
+  const showEmptyPlot = (canvas) => {
+    const frame = canvas.parentElement;
+    if (!frame) {
+      return;
+    }
+    const note = document.createElement("p");
+    note.className = "plot__empty";
+    note.textContent = "この期間に記録がありません。";
+    frame.replaceChildren(note);
+    frame.classList.add("plot__frame--empty");
+  };
+
+  const buildLineChart = (id, labels, datasets, options) => {
     const canvas = document.getElementById(id);
     if (!canvas) {
+      return;
+    }
+    if (!datasets.some((dataset) => hasValue(dataset.data))) {
+      showEmptyPlot(canvas);
       return;
     }
     new Chart(canvas, {
       type: "line",
       data: { labels, datasets },
-      options: baseOptions(unit, tooltipAfterBody),
+      options: baseOptions(options),
     });
   };
 
-  const buildBarChart = (id, labels, values, unit, tooltipAfterBody) => {
+  const buildBarChart = (id, labels, values, options) => {
     const canvas = document.getElementById(id);
     if (!canvas) {
+      return;
+    }
+    if (!hasValue(values)) {
+      showEmptyPlot(canvas);
       return;
     }
     new Chart(canvas, {
@@ -131,13 +178,14 @@
           {
             label: "運動時間",
             data: values,
-            backgroundColor: colors.exercise,
-            borderRadius: 5,
-            maxBarThickness: 30,
+            backgroundColor: palette.measured,
+            borderRadius: { topLeft: 4, topRight: 4 },
+            borderSkipped: "bottom",
+            maxBarThickness: 18,
           },
         ],
       },
-      options: baseOptions(unit, tooltipAfterBody),
+      options: baseOptions(options),
     });
   };
 
@@ -150,83 +198,87 @@
       "calorie-chart",
       labels,
       [
+        // 推定範囲は下限を無地の線にして上限から塗り、帯だけを見せる。
         lineDataset(
           "推定下限",
           trend.map((point) => point.calories_min),
-          colors.calorie,
-          {
-            borderWidth: 1,
-            borderDash: [3, 4],
-            pointRadius: 0,
-          },
+          "transparent",
+          { borderWidth: 0, pointHoverRadius: 0, chrome: true },
         ),
         lineDataset(
           "推定上限",
           trend.map((point) => point.calories_max),
-          colors.calorie,
+          "transparent",
           {
-            borderWidth: 1,
-            borderDash: [3, 4],
-            pointRadius: 0,
+            borderWidth: 0,
+            pointHoverRadius: 0,
             fill: "-1",
-            backgroundColor: colors.range,
+            backgroundColor: palette.measuredWash,
+            chrome: true,
           },
         ),
         lineDataset(
-          "代表値",
+          "摂取カロリー",
           trend.map((point) => point.calories),
-          colors.calorie,
+          palette.measured,
+          { pointRadius: 2 },
         ),
         lineDataset(
           "目標",
           trend.map((point) => point.target_calories),
-          colors.target,
-          {
-            borderDash: [7, 5],
-            pointRadius: 0,
-            borderWidth: 1.5,
-          },
+          palette.reference,
+          // 目標が単日しか存在しない期間でも見えるよう、線に加えて小さな点を打つ。
+          { borderWidth: 1.5, borderDash: [5, 4], pointRadius: 1.5 },
         ),
       ],
-      "kcal",
+      {
+        unit: "kcal",
+        showLegend: true,
+        tooltipAfterBody: (context) => {
+          if (!context.length) {
+            return [];
+          }
+          const point = trend[context[0].dataIndex];
+          if (point.calories_min === null || point.calories_max === null) {
+            return [];
+          }
+          const range = `${point.calories_min.toLocaleString("ja-JP")}–${point.calories_max.toLocaleString("ja-JP")}`;
+          return [`推定範囲: ${range} kcal`];
+        },
+      },
     );
     buildLineChart(
       "weight-chart",
       labels,
       [
-        lineDataset(
+        dotDataset(
           "実測値",
           trend.map((point) => point.weight),
-          colors.weight,
-          { showLine: false, pointRadius: 4 },
+          palette.measured,
         ),
         lineDataset(
           "7日移動平均",
           trend.map((point) => point.weight_moving_average),
-          colors.average,
-          { pointRadius: 1.5, borderWidth: 2.5 },
+          palette.reference,
         ),
       ],
-      "kg",
+      { unit: "kg", showLegend: true },
     );
     buildBarChart(
       "exercise-chart",
       labels,
       trend.map((point) => point.exercise_minutes),
-      "分",
+      { unit: "分", showLegend: false },
     );
   }
 
   if (report.kind === "weekly") {
-    const labels = trend.map(
-      (point) => `${shortDate(point.period_start)}–${shortDate(point.period_end)}`,
-    );
-    const coverage = (context) => {
+    const labels = trend.map((point) => shortDate(point.period_end));
+    const mealCoverage = (context) => {
       if (!context.length) {
         return [];
       }
-      const point = trend[context[0].dataIndex];
-      return [`記録日数: ${point.recorded_meal_days}/7日`];
+      return [`記録日数: ${trend[context[0].dataIndex].recorded_meal_days}/7日`];
     };
     buildLineChart(
       "calorie-chart",
@@ -235,12 +287,11 @@
         lineDataset(
           "週平均",
           trend.map((point) => point.average_calories),
-          colors.calorie,
-          { pointRadius: 4 },
+          palette.measured,
+          { pointRadius: 3 },
         ),
       ],
-      "kcal/日",
-      coverage,
+      { unit: "kcal/日", showLegend: false, tooltipAfterBody: mealCoverage },
     );
     buildLineChart(
       "weight-chart",
@@ -249,30 +300,30 @@
         lineDataset(
           "週平均",
           trend.map((point) => point.average_weight),
-          colors.weight,
-          { pointRadius: 4 },
+          palette.measured,
+          { pointRadius: 3 },
         ),
       ],
-      "kg",
-      (context) => {
-        if (!context.length) {
-          return [];
-        }
-        const point = trend[context[0].dataIndex];
-        return [`測定数: ${point.weight_measurements}回`];
+      {
+        unit: "kg",
+        showLegend: false,
+        tooltipAfterBody: (context) =>
+          context.length
+            ? [`測定数: ${trend[context[0].dataIndex].weight_measurements}回`]
+            : [],
       },
     );
     buildBarChart(
       "exercise-chart",
       labels,
       trend.map((point) => point.exercise_minutes),
-      "分",
-      (context) => {
-        if (!context.length) {
-          return [];
-        }
-        const point = trend[context[0].dataIndex];
-        return [`記録日数: ${point.recorded_exercise_days}/7日`];
+      {
+        unit: "分",
+        showLegend: false,
+        tooltipAfterBody: (context) =>
+          context.length
+            ? [`記録日数: ${trend[context[0].dataIndex].recorded_exercise_days}/7日`]
+            : [],
       },
     );
   }

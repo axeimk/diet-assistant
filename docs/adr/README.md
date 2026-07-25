@@ -53,3 +53,4 @@
 | [0005](0005-report-day-start-time.md) | レポート日はプロフィールの一日開始時刻から導出する | 承認済み |
 | [0006](0006-html-reports-as-static-files-with-chartjs.md) | HTMLレポートはChart.jsを埋め込んだ単一の静的ファイルとして生成する | 承認済み |
 | [0007](0007-unrecorded-values-are-missing.md) | 未記録の値をゼロとして集計しない | 承認済み |
+| [0008](0008-report-design-language.md) | HTMLレポートは面ではなく罫線で構造を作り、系列色は実測と参照の2色に固定する | 承認済み |

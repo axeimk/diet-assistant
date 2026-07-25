@@ -8,18 +8,19 @@
   <style>{{ report_css | safe }}</style>
 </head>
 <body>
-  <header class="page-header">
-    <div class="page-header__inner">
-      <p class="eyebrow">Diet Assistant</p>
-      <h1>{{ title }}</h1>
-      {% block header_detail %}{% endblock %}
+  <header class="masthead">
+    <div class="masthead__row">
+      <h1>{{ heading }}</h1>
+      <p class="masthead__date">{{ period_label }}</p>
     </div>
+    <p class="masthead__note">{% block masthead_note %}{% endblock %}</p>
   </header>
-  <main class="page-shell">
+  <main class="document">
     {% block content %}{% endblock %}
   </main>
-  <footer class="page-footer">
+  <footer class="colophon">
     <p>単日の値だけでなく、継続的な傾向を見て判断しましょう。</p>
+    <p>記録がない項目は0ではなく欠損として扱い、グラフでも線をつなぎません。</p>
   </footer>
   <script id="report-data" type="application/json">{{ {"kind": report_kind, "trend": trend} | tojson }}</script>
   <script>{{ chart_js | safe }}</script>

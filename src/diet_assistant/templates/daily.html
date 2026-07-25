@@ -1,149 +1,178 @@
 {% extends "base.html" %}
 
-{% block header_detail %}
-<p class="page-header__summary">当日の記録と、対象日を含む直近28日の傾向</p>
-{% endblock %}
+{% block masthead_note %}当日の記録と、対象日を含む直近28日の傾向{% endblock %}
 
 {% block content %}
 {% set totals = summary.totals %}
-<section class="summary-grid" aria-label="当日のサマリー">
-  <article class="summary-card">
-    <p class="summary-card__label">摂取カロリー</p>
-    <p class="summary-card__value">
-      {% if summary.meals %}
-      {{ totals.estimated_calories | round(1) }} <span>kcal</span>
-      {% else %}
-      <span class="missing">記録なし</span>
-      {% endif %}
-    </p>
+{% set meal_type_labels = {
+  "breakfast": "朝食",
+  "lunch": "昼食",
+  "dinner": "夕食",
+  "snack": "間食",
+  "other": "その他",
+} %}
+<section class="figures" aria-label="当日のサマリー">
+  <div class="figure">
+    <p class="figure__label">摂取カロリー</p>
     {% if summary.meals %}
-    <p class="summary-card__note">
-      推定範囲 {{ totals.calories_min | round(1) }}〜{{ totals.calories_max | round(1) }} kcal
-    </p>
+    <p class="figure__value">{{ "{:,.0f}".format(totals.estimated_calories) }}<span class="figure__unit">kcal</span></p>
+    <p class="figure__note">推定 {{ "{:,.0f}".format(totals.calories_min) }}–{{ "{:,.0f}".format(totals.calories_max) }}</p>
+    {% else %}
+    <p class="figure__value"><span class="unrecorded">記録なし</span></p>
     {% endif %}
-  </article>
-  <article class="summary-card">
-    <p class="summary-card__label">体重</p>
-    <p class="summary-card__value">
-      {% if summary.metric and summary.metric.weight is not none %}
-      {{ summary.metric.weight | round(2) }} <span>kg</span>
-      {% else %}
-      <span class="missing">記録なし</span>
-      {% endif %}
-    </p>
-  </article>
-  <article class="summary-card">
-    <p class="summary-card__label">運動時間</p>
-    <p class="summary-card__value">
-      {% if summary.exercises %}
-      {{ totals.exercise_minutes | round(1) }} <span>分</span>
-      {% else %}
-      <span class="missing">記録なし</span>
-      {% endif %}
-    </p>
-  </article>
-  <article class="summary-card">
-    <p class="summary-card__label">目標との差</p>
-    <p class="summary-card__value">
-      {% if summary.difference_from_target is not none %}
-      {{ "%+.1f" | format(summary.difference_from_target) }} <span>kcal</span>
-      {% elif not summary.meals %}
-      <span class="missing">食事記録なし</span>
-      {% else %}
-      <span class="missing">目標未設定</span>
-      {% endif %}
-    </p>
-  </article>
+  </div>
+  <div class="figure">
+    <p class="figure__label">体重</p>
+    {% if summary.metric and summary.metric.weight is not none %}
+    <p class="figure__value">{{ "%.2f" | format(summary.metric.weight) }}<span class="figure__unit">kg</span></p>
+    {% else %}
+    <p class="figure__value"><span class="unrecorded">記録なし</span></p>
+    {% endif %}
+  </div>
+  <div class="figure">
+    <p class="figure__label">運動時間</p>
+    {% if summary.exercises %}
+    <p class="figure__value">{{ "%.0f" | format(totals.exercise_minutes) }}<span class="figure__unit">分</span></p>
+    <p class="figure__note">{{ summary.exercises | length }}件</p>
+    {% else %}
+    <p class="figure__value"><span class="unrecorded">記録なし</span></p>
+    {% endif %}
+  </div>
+  <div class="figure">
+    <p class="figure__label">目標との差</p>
+    {% if summary.difference_from_target is not none %}
+    <p class="figure__value">{{ "{:+,.0f}".format(summary.difference_from_target) }}<span class="figure__unit">kcal</span></p>
+    {% elif not summary.meals %}
+    <p class="figure__value"><span class="unrecorded">食事記録なし</span></p>
+    {% else %}
+    <p class="figure__value"><span class="unrecorded">目標未設定</span></p>
+    {% endif %}
+  </div>
 </section>
 
-<section class="panel panel--accent">
-  <div class="section-heading">
-    <div>
-      <p class="eyebrow">Priority</p>
-      <h2>今日の短い助言</h2>
-    </div>
+<section class="sheet">
+  <div class="sheet__head">
+    <h2><span class="sheet__index">1</span>今日の一手</h2>
   </div>
-  <p class="advice-lead">{{ advice.situation }}</p>
-  <p class="priority-action">{{ advice.priority_action }}</p>
+  <div class="statement">
+    <p class="statement__lead">{{ advice.situation }}</p>
+    <p class="statement__action">{{ advice.priority_action }}</p>
+  </div>
 </section>
 
-<section class="section-block" aria-labelledby="trend-heading">
-  <div class="section-heading">
-    <div>
-      <p class="eyebrow">28-day trend</p>
-      <h2 id="trend-heading">直近28日の推移</h2>
-    </div>
-    <p class="section-note">凡例を選ぶと系列を表示・非表示にできます。</p>
+<section class="sheet" aria-labelledby="trend-heading">
+  <div class="sheet__head">
+    <h2 id="trend-heading"><span class="sheet__index">2</span>直近28日の推移</h2>
+    <p class="sheet__aside">凡例をクリックすると系列を隠せます</p>
   </div>
-  <div class="chart-grid">
-    <article class="panel chart-panel">
-      <h3>摂取カロリー</h3>
-      <p>代表値、推定範囲、その日に有効だった目標</p>
-      <div class="chart-frame"><canvas id="calorie-chart">摂取カロリーの推移グラフ</canvas></div>
-    </article>
-    <article class="panel chart-panel">
-      <h3>体重</h3>
+
+  <figure class="plot">
+    <figcaption class="plot__caption">
+      <h3>摂取カロリー <span class="plot__unit">kcal</span></h3>
+      <p>代表値と推定範囲、その日に有効だった目標</p>
+    </figcaption>
+    <div class="plot__frame"><canvas id="calorie-chart">摂取カロリーの推移グラフ</canvas></div>
+  </figure>
+
+  <figure class="plot">
+    <figcaption class="plot__caption">
+      <h3>体重 <span class="plot__unit">kg</span></h3>
       <p>実測値と、測定3回以上の区間における7日移動平均</p>
-      <div class="chart-frame"><canvas id="weight-chart">体重の推移グラフ</canvas></div>
-    </article>
-    <article class="panel chart-panel chart-panel--wide">
-      <h3>運動時間</h3>
-      <p>記録がない日は0分ではなく欠損として扱います。</p>
-      <div class="chart-frame chart-frame--short"><canvas id="exercise-chart">運動時間の推移グラフ</canvas></div>
-    </article>
-  </div>
+    </figcaption>
+    <div class="plot__frame"><canvas id="weight-chart">体重の推移グラフ</canvas></div>
+  </figure>
+
+  <figure class="plot">
+    <figcaption class="plot__caption">
+      <h3>運動時間 <span class="plot__unit">分</span></h3>
+      <p>記録がない日は0分ではなく欠損として扱います</p>
+    </figcaption>
+    <div class="plot__frame plot__frame--short"><canvas id="exercise-chart">運動時間の推移グラフ</canvas></div>
+  </figure>
+
+  <details class="datasheet">
+    <summary>数値表を見る</summary>
+    <div class="datasheet__body">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">日付</th>
+            <th scope="col">摂取 (kcal)</th>
+            <th scope="col">目標 (kcal)</th>
+            <th scope="col">体重 (kg)</th>
+            <th scope="col">運動 (分)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for point in trend %}
+          <tr>
+            <th scope="row">{{ point.date }}</th>
+            <td>{{ "{:,.0f}".format(point.calories) if point.calories is not none else "—" }}</td>
+            <td>{{ "{:,.0f}".format(point.target_calories) if point.target_calories is not none else "—" }}</td>
+            <td>{{ "%.2f" | format(point.weight) if point.weight is not none else "—" }}</td>
+            <td>{{ "%.0f" | format(point.exercise_minutes) if point.exercise_minutes is not none else "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
 </section>
 
-<div class="content-grid">
-  <section class="panel">
-    <div class="section-heading">
-      <h2>食事</h2>
-      <span class="count-badge">{{ summary.meals | length }}件</span>
+<section class="sheet">
+  <div class="sheet__head">
+    <h2><span class="sheet__index">3</span>当日の記録</h2>
+    <p class="sheet__aside">食事 {{ summary.meals | length }}件・運動 {{ summary.exercises | length }}件</p>
+  </div>
+  <div class="spread">
+    <div>
+      <p class="subhead">食事</p>
+      {% if summary.meals %}
+      <ol class="entries">
+        {% for meal in summary.meals %}
+        <li>
+          <div>
+            <time>{{ meal.eaten_at[11:16] }}</time>
+            <p class="entries__kind">{{ meal_type_labels.get(meal.meal_type, meal.meal_type) }}</p>
+          </div>
+          <p class="entries__text">{{ meal.note or "（メモなし）" }}</p>
+          <p class="entries__value">
+            {% if meal.estimated_calories is not none %}
+            {{ "{:,.0f}".format(meal.estimated_calories) }} kcal
+            {% else %}
+            カロリー不明
+            {% endif %}
+          </p>
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}
+      <p class="note">食事の記録はありません。</p>
+      {% endif %}
     </div>
-    {% if summary.meals %}
-    <ol class="record-list">
-      {% for meal in summary.meals %}
-      <li>
-        <div>
-          <time>{{ meal.eaten_at[11:16] }}</time>
-          <strong>{{ meal.meal_type }}</strong>
-        </div>
-        <p>{{ meal.note or "（メモなし）" }}</p>
-        <span>
-          {% if meal.estimated_calories is not none %}
-          {{ meal.estimated_calories | round(1) }} kcal
-          {% else %}
-          カロリー不明
-          {% endif %}
-        </span>
-      </li>
-      {% endfor %}
-    </ol>
-    {% else %}
-    <p class="empty-state">食事の記録はありません。</p>
-    {% endif %}
-  </section>
-
-  <section class="panel">
-    <h2>栄養集計</h2>
-    {% if summary.meals %}
-    <dl class="metric-list">
-      <div><dt>たんぱく質</dt><dd>{{ totals.protein | round(1) }} g</dd></div>
-      <div><dt>脂質</dt><dd>{{ totals.fat | round(1) }} g</dd></div>
-      <div><dt>炭水化物</dt><dd>{{ totals.carbohydrates | round(1) }} g</dd></div>
-      <div><dt>食物繊維</dt><dd>{{ totals.fiber | round(1) }} g</dd></div>
-      <div><dt>食塩相当量</dt><dd>{{ totals.sodium | round(1) }} g</dd></div>
-    </dl>
-    {% else %}
-    <p class="empty-state">食事の記録はありません。</p>
-    {% endif %}
-  </section>
-</div>
+    <div>
+      <p class="subhead">栄養集計</p>
+      {% if summary.meals %}
+      <dl class="pairs">
+        <div><dt>たんぱく質</dt><dd>{{ "%.1f" | format(totals.protein) }} g</dd></div>
+        <div><dt>脂質</dt><dd>{{ "%.1f" | format(totals.fat) }} g</dd></div>
+        <div><dt>炭水化物</dt><dd>{{ "%.1f" | format(totals.carbohydrates) }} g</dd></div>
+        <div><dt>食物繊維</dt><dd>{{ "%.1f" | format(totals.fiber) }} g</dd></div>
+        <div><dt>食塩相当量</dt><dd>{{ "%.1f" | format(totals.sodium) }} g</dd></div>
+      </dl>
+      {% else %}
+      <p class="note">食事の記録はありません。</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
 
 {% if goal_evaluation %}
-<section class="panel">
-  <div class="section-heading"><h2>目標の達成判定</h2></div>
-  <dl class="metric-list metric-list--columns">
+<section class="sheet">
+  <div class="sheet__head">
+    <h2><span class="sheet__index">4</span>目標の達成判定</h2>
+  </div>
+  <dl class="pairs pairs--split">
     <div>
       <dt>判定</dt>
       <dd>
@@ -154,20 +183,22 @@
         {% else %}{{ goal_evaluation.outcome }}{% endif %}
       </dd>
     </div>
-    <div><dt>評価期間</dt><dd>{{ goal_evaluation.period_start }}〜{{ goal_evaluation.period_end }}</dd></div>
-    <div><dt>体重平均</dt><dd>{{ goal_evaluation.average_weight if goal_evaluation.average_weight is not none else "算出不可" }} kg</dd></div>
-    <div><dt>測定数</dt><dd>{{ goal_evaluation.weight_measurements }}/{{ goal_evaluation.evaluation_window_days }}日</dd></div>
+    <div><dt>評価期間</dt><dd>{{ goal_evaluation.period_start }} — {{ goal_evaluation.period_end }}</dd></div>
+    <div><dt>体重平均</dt><dd>{{ goal_evaluation.average_weight ~ " kg" if goal_evaluation.average_weight is not none else "算出不可" }}</dd></div>
+    <div><dt>測定数</dt><dd>{{ goal_evaluation.weight_measurements }} / {{ goal_evaluation.evaluation_window_days }}日</dd></div>
     <div><dt>最終判定</dt><dd>{{ "はい" if goal_evaluation.is_final else "いいえ（途中経過）" }}</dd></div>
   </dl>
 </section>
 {% endif %}
 
-<section class="panel uncertainty-panel">
-  <h2>不確実性の高い記録</h2>
+<section class="sheet">
+  <div class="sheet__head">
+    <h2><span class="sheet__index">{{ 5 if goal_evaluation else 4 }}</span>不確実性の高い記録</h2>
+  </div>
   {% if summary.uncertain_meal_ids %}
-  <p>食事ID: {{ summary.uncertain_meal_ids | join(", ") }}</p>
+  <p class="note">食事ID {{ summary.uncertain_meal_ids | join(", ") }} は確信度が低い推定です。数値を鵜呑みにせず、傾向の目安として読んでください。</p>
   {% else %}
-  <p class="empty-state">該当する記録はありません。</p>
+  <p class="note">該当する記録はありません。</p>
   {% endif %}
 </section>
 {% endblock %}

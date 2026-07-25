@@ -123,6 +123,8 @@ def daily_html(
     return _render(
         "daily.html",
         title=f"日次レポート {summary['date']}",
+        heading="日次レポート",
+        period_label=summary["date"],
         report_kind="daily",
         summary=summary,
         advice=advice,
@@ -139,6 +141,8 @@ def weekly_html(
     return _render(
         "weekly.html",
         title=f"週次レポート {summary['period_start']}〜{summary['period_end']}",
+        heading="週次レポート",
+        period_label=f"{summary['period_start']} — {summary['period_end']}",
         report_kind="weekly",
         summary=summary,
         advice=advice,
