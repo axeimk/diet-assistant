@@ -122,7 +122,7 @@
         <tbody>
           {% for point in trend %}
           <tr>
-            <th scope="row">{{ point.date }}</th>
+            <th scope="row">{{ point.date | with_weekday }}</th>
             <td>{{ "{:,.0f}".format(point.calories) if point.calories is not none else "—" }}</td>
             <td>{{ "{:,.0f}".format(point.target_calories) if point.target_calories is not none else "—" }}</td>
             <td>{{ "%.2f" | format(point.weight) if point.weight is not none else "—" }}</td>
@@ -216,7 +216,7 @@
         {% else %}{{ goal_evaluation.outcome }}{% endif %}
       </dd>
     </div>
-    <div><dt>評価期間</dt><dd>{{ goal_evaluation.period_start }} — {{ goal_evaluation.period_end }}</dd></div>
+    <div><dt>評価期間</dt><dd>{{ goal_evaluation.period_start | with_weekday }} — {{ goal_evaluation.period_end | with_weekday }}</dd></div>
     <div><dt>体重平均</dt><dd>{{ goal_evaluation.average_weight ~ " kg" if goal_evaluation.average_weight is not none else "算出不可" }}</dd></div>
     <div><dt>測定数</dt><dd>{{ goal_evaluation.weight_measurements }} / {{ goal_evaluation.evaluation_window_days }}日</dd></div>
     <div><dt>最終判定</dt><dd>{{ "はい" if goal_evaluation.is_final else "いいえ（途中経過）" }}</dd></div>

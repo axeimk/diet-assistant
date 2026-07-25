@@ -257,8 +257,8 @@ def test_weekly_report_generates_html_with_daily_table(
     assert html.count("<tbody>") == 2
     daily_table = html.split("対象週の日別記録", 1)[1]
     assert daily_table.count("<tr>") == 8
-    for day in range(15, 22):
-        assert f'<th scope="row">2026-07-{day}</th>' in daily_table
+    for day, weekday in zip(range(15, 22), "水木金土日月火", strict=True):
+        assert f'<th scope="row">2026-07-{day}（{weekday}）</th>' in daily_table
 
 
 def test_html_stdout_does_not_save_or_open_browser(

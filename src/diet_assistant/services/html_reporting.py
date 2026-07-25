@@ -10,6 +10,7 @@ from typing import Literal, TypedDict
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
+from ..util import with_weekday
 from .finding import Finding
 from .nutrition import NutrientComparison
 from .reporting import (
@@ -230,7 +231,7 @@ def daily_html(
         "daily.html",
         title=f"日次レポート {summary['date']}",
         heading="日次レポート",
-        period_label=summary["date"],
+        period_label=with_weekday(summary["date"]),
         report_kind="daily",
         summary=summary,
         feedback=feedback,
@@ -255,7 +256,8 @@ def weekly_html(
         "weekly.html",
         title=f"週次レポート {summary['period_start']}〜{summary['period_end']}",
         heading="週次レポート",
-        period_label=f"{summary['period_start']} — {summary['period_end']}",
+        period_label=f"{with_weekday(summary['period_start'])} — "
+        + with_weekday(summary["period_end"]),
         report_kind="weekly",
         summary=summary,
         feedback=feedback,
@@ -277,12 +279,14 @@ def _render(template_name: str, **context: object) -> str:
 
 @cache
 def _environment() -> Environment:
-    return Environment(
+    environment = Environment(
         loader=PackageLoader("diet_assistant", "templates"),
         autoescape=select_autoescape(("html",)),
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    environment.filters["with_weekday"] = with_weekday
+    return environment
 
 
 @cache

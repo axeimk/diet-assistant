@@ -162,7 +162,12 @@ def test_daily_html_marks_goal_outcome(db_path: Path) -> None:
     summary = _lunch_summary(db_path, 2000)
 
     def verdict(outcome: str) -> str:
-        html = daily_html(summary, None, [], {"outcome": outcome}, [])
+        evaluation: dict[str, object] = {
+            "outcome": outcome,
+            "period_start": "2026-07-21",
+            "period_end": "2026-07-21",
+        }
+        html = daily_html(summary, None, [], evaluation, [])
         return html.split("目標の達成判定", 1)[1].split("</section>", 1)[0]
 
     assert 'class="status status--good status--check">挑戦目標達成' in verdict(
@@ -255,6 +260,38 @@ def test_daily_trend_preserves_missing_values_and_requires_three_weights(
     assert trend[-1]["weight_moving_average"] == 69.8
     assert trend[-3]["weight_moving_average"] is None
     assert trend[-1]["exercise_minutes"] is None
+
+
+def test_daily_html_shows_weekdays_outside_the_charts(db_path: Path) -> None:
+    summary = _lunch_summary(db_path, 2000)
+    trend = daily_trend(db_path, date(2026, 7, 21), days=7)
+
+    evaluation: dict[str, object] = {
+        "outcome": "not_achieved",
+        "period_start": "2026-07-20",
+        "period_end": "2026-07-26",
+    }
+
+    html = daily_html(summary, None, [], evaluation, trend)
+
+    assert '<p class="masthead__date">2026-07-21（火）</p>' in html
+    assert '<th scope="row">2026-07-21（火）</th>' in html
+    verdict = html.split("目標の達成判定", 1)[1].split("</section>", 1)[0]
+    assert "2026-07-20（月） — 2026-07-26（日）" in verdict
+    # グラフのラベルは素の日付のまま。曜日は入れない。
+    chart_data = html.split('id="report-data"', 1)[1].split("</script>", 1)[0]
+    assert '"date": "2026-07-21"' in chart_data
+    assert "（火）" not in chart_data
+
+
+def test_weekly_html_shows_weekdays_in_the_daily_table(db_path: Path) -> None:
+    summary = weekly_summary(db_path, date(2026, 7, 26))
+
+    html = weekly_html(summary, None, [], [])
+
+    assert '<p class="masthead__date">2026-07-20（月） — 2026-07-26（日）</p>' in html
+    assert '<th scope="row">2026-07-20（月）</th>' in html
+    assert '<th scope="row">2026-07-26（日）</th>' in html
 
 
 def test_daily_html_marks_each_nutrient_status(db_path: Path) -> None:

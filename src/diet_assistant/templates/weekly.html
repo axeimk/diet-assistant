@@ -150,7 +150,7 @@
     <tbody>
       {% for day in summary.daily %}
       <tr>
-        <th scope="row">{{ day.date }}</th>
+        <th scope="row">{{ day.date | with_weekday }}</th>
         <td>
           {% if day.meals %}{{ "{:,.0f}".format(day.totals.estimated_calories) }} kcal
           {% else %}<span class="unrecorded">—</span>{% endif %}

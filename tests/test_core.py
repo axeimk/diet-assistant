@@ -28,7 +28,13 @@ from diet_assistant.services.planning import (
     save_plan,
 )
 from diet_assistant.services.reporting import daily_summary, period_summary, weekly_summary
-from diet_assistant.util import now_iso, reporting_date, require_str
+from diet_assistant.util import now_iso, reporting_date, require_str, with_weekday
+
+
+def test_with_weekday_labels_each_day_in_japanese() -> None:
+    assert with_weekday("2026-07-20") == "2026-07-20（月）"
+    assert with_weekday("2026-07-25") == "2026-07-25（土）"
+    assert with_weekday("2026-07-26") == "2026-07-26（日）"
 
 
 def test_db_initialization(db_path: Path) -> None:

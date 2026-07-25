@@ -32,6 +32,14 @@ def reporting_date(moment: datetime, *, starts_at: time = time.min) -> date:
     return day - timedelta(days=1) if moment.timetz().replace(tzinfo=None) < starts_at else day
 
 
+_WEEKDAY_LABELS = ("月", "火", "水", "木", "金", "土", "日")
+
+
+def with_weekday(value: str) -> str:
+    """ISO 8601の日付に曜日を添える。'2026-07-26' → '2026-07-26（日）'"""
+    return f"{value}（{_WEEKDAY_LABELS[date.fromisoformat(value).weekday()]}）"
+
+
 def age_on(birth_date: date, on_date: date) -> int:
     before_birthday = (on_date.month, on_date.day) < (birth_date.month, birth_date.day)
     return on_date.year - birth_date.year - before_birthday
