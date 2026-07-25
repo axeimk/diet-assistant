@@ -283,9 +283,9 @@ def _amount(value: float) -> str:
     return str(int(value)) if value == int(value) else str(value)
 
 
-_WRITE_HINT = "の分析結果から書いて `diet advice save` で保存する）"
-_UNWRITTEN_DAILY = "（フィードバックは未記載。`diet advice today` " + _WRITE_HINT
-_UNWRITTEN_WEEKLY = "- （フィードバックは未記載。`diet advice weekly` " + _WRITE_HINT
+_WRITE_HINT = "の分析結果から書いて `diet feedback save` で保存する）"
+_UNWRITTEN_DAILY = "（フィードバックは未記載。`diet feedback today` " + _WRITE_HINT
+_UNWRITTEN_WEEKLY = "- （フィードバックは未記載。`diet feedback weekly` " + _WRITE_HINT
 
 FINDING_LABELS = {
     "meal_records_missing": "食事記録のある日数",
@@ -348,7 +348,7 @@ def _signed(value: float) -> str:
 
 def daily_markdown(
     summary: DailySummary,
-    advice: dict[str, object] | None = None,
+    feedback: dict[str, object] | None = None,
     findings: Sequence[Finding] | None = None,
     goal_evaluation: dict[str, object] | None = None,
 ) -> str:
@@ -372,9 +372,9 @@ def daily_markdown(
         + f"({m['estimated_calories'] if m['estimated_calories'] is not None else '?'} kcal)"
         for m in summary["meals"]
     ] or ["- 記録なし"]
-    advice_lines = (
-        [require_str(advice, "situation") + " " + require_str(advice, "priority_action")]
-        if advice
+    feedback_lines = (
+        [require_str(feedback, "situation") + " " + require_str(feedback, "priority_action")]
+        if feedback
         else [_UNWRITTEN_DAILY]
     )
     outcome_labels = {
@@ -430,7 +430,7 @@ def daily_markdown(
             f"- 目標との差: {difference_text}",
             "",
             "## 短いフィードバック",
-            *advice_lines,
+            *feedback_lines,
             "",
             "## 分析結果",
             *findings_markdown(findings or []),
@@ -443,17 +443,17 @@ def daily_markdown(
     )
 
 
-def _advice_item(advice: dict[str, object] | None, key: str) -> str:
+def _feedback_item(feedback: dict[str, object] | None, key: str) -> str:
     """保存済みフィードバックの項目。未記載なら捏造せず、未記載と書く。"""
-    if advice is None:
+    if feedback is None:
         return _UNWRITTEN_WEEKLY
-    value = advice.get(key)
+    value = feedback.get(key)
     return f"- {value}" if isinstance(value, str) and value else "- （未記載）"
 
 
 def weekly_markdown(
     summary: PeriodSummary,
-    advice: dict[str, object] | None = None,
+    feedback: dict[str, object] | None = None,
     findings: Sequence[Finding] | None = None,
 ) -> str:
     changes = summary.get("changes")
@@ -492,19 +492,19 @@ def weekly_markdown(
             *findings_markdown(findings or []),
             "",
             "## よかった点",
-            _advice_item(advice, "keep"),
+            _feedback_item(feedback, "keep"),
             "",
             "## 調整したほうがよい点",
-            _advice_item(advice, "situation"),
+            _feedback_item(feedback, "situation"),
             "",
             "## 来週の最優先行動",
-            _advice_item(advice, "priority_action"),
+            _feedback_item(feedback, "priority_action"),
             "",
             "## 代替案",
-            _advice_item(advice, "alternative"),
+            _feedback_item(feedback, "alternative"),
             "",
             "## 計画変更",
-            _advice_item(advice, "plan_change"),
+            _feedback_item(feedback, "plan_change"),
             "",
             "## データ不足",
             f"- {', '.join(missing) if missing else 'なし'}",

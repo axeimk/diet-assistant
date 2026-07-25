@@ -25,6 +25,16 @@ def test_empty_profile_is_valid() -> None:
     assert validate_profile({}) == []
 
 
+def test_feedback_preference_is_valid() -> None:
+    assert validate_profile({"feedback_preference": "継続可能な変更を優先"}) == []
+
+
+def test_legacy_feedback_preference_key_is_rejected() -> None:
+    assert validate_profile({"advice_preference": "旧設定"}) == [
+        "advice_preference は未知のキーです"
+    ]
+
+
 def test_out_of_range_values_are_reported() -> None:
     errors = validate_profile({"height_cm": 300, "meals_per_day": 0, "photo_retention_days": 0})
     assert len(errors) == 3

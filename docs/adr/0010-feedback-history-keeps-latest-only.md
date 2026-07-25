@@ -3,6 +3,8 @@
 - ステータス: 承認済み
 - 日付: 2026-07-25
 
+> このADR内の識別子は決定当時の名称。現在の`feedback`名への変更はADR 0015を参照。
+
 フィードバックは`diet report`や`diet advice`を実行するたびに生成されるため、追記型では読み取り操作の
 たびに`advice_history`が増え続けていた（食事26件・6日分の記録に対し110行、同じ日の日次フィードバックが
 最大23行）。そこで`(advice_type, period_start, period_end, COALESCE(meal_id, 0))`を一意キーとし、

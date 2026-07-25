@@ -218,7 +218,7 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
 
     applied = migrate(path)
 
-    assert applied == [2, 3, 4, 5, 6, 7, 8, 9]
+    assert applied == [2, 3, 4, 5, 6, 7, 8, 9, 10]
     assert schema_version(path) == SCHEMA_VERSION
     with connect(path) as connection:
         row = tuple(
@@ -293,11 +293,13 @@ def test_migration_adds_nutrient_targets_and_basis_weight(tmp_path: Path) -> Non
     assert {"nutrient_targets", "basis_weight"} <= plan_columns
 
 
-def test_migration_marks_existing_advice_as_cli_written(tmp_path: Path) -> None:
+def test_migration_marks_existing_feedback_as_cli_written(tmp_path: Path) -> None:
     """旧実装がCLIで生成したフィードバックは消さず、書き手を`cli`として残す。"""
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
-    _insert_v1_advice(path, "7day", "2026-07-20", "2026-07-20T21:00:00+09:00", "旧定型文", None)
+    _insert_v1_legacy_feedback(
+        path, "7day", "2026-07-20", "2026-07-20T21:00:00+09:00", "旧定型文", None
+    )
 
     _ = migrate(path)
 
@@ -306,14 +308,19 @@ def test_migration_marks_existing_advice_as_cli_written(tmp_path: Path) -> None:
             tuple(row)
             for row in cast(
                 list[sqlite3.Row],
-                connection.execute("SELECT summary, written_by FROM advice_history").fetchall(),
+                connection.execute("SELECT summary, written_by FROM feedback_history").fetchall(),
             )
         ]
     assert rows == [("旧定型文", "cli")]
 
 
-def _insert_v1_advice(
-    path: Path, advice_type: str, day: str, generated_at: str, summary: str, meal_id: int | None
+def _insert_v1_legacy_feedback(
+    path: Path,
+    legacy_feedback_type: str,
+    day: str,
+    generated_at: str,
+    summary: str,
+    meal_id: int | None,
 ) -> None:
     details = json.dumps(
         {"situation": summary, **({"meal_id": meal_id} if meal_id is not None else {})},
@@ -325,18 +332,24 @@ def _insert_v1_advice(
                 "INSERT INTO advice_history (generated_at, advice_type, period_start, "
                 + "period_end, summary, details, evidence, priority, status) "
                 + "VALUES (?, ?, ?, ?, ?, ?, '{}', 'normal', 'active')",
-                (generated_at, advice_type, day, day, summary, details),
+                (generated_at, legacy_feedback_type, day, day, summary, details),
             )
 
 
-def test_migration_keeps_only_latest_advice_per_period(tmp_path: Path) -> None:
+def test_migration_keeps_only_latest_feedback_per_period(tmp_path: Path) -> None:
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
     day = "2026-07-20"
-    _insert_v1_advice(path, "daily", day, "2026-07-20T09:00:00+09:00", "朝のフィードバック", None)
-    _insert_v1_advice(path, "daily", day, "2026-07-20T21:00:00+09:00", "夜のフィードバック", None)
-    _insert_v1_advice(path, "7day", day, "2026-07-20T21:00:00+09:00", "週のフィードバック", None)
-    _insert_v1_advice(
+    _insert_v1_legacy_feedback(
+        path, "daily", day, "2026-07-20T09:00:00+09:00", "朝のフィードバック", None
+    )
+    _insert_v1_legacy_feedback(
+        path, "daily", day, "2026-07-20T21:00:00+09:00", "夜のフィードバック", None
+    )
+    _insert_v1_legacy_feedback(
+        path, "7day", day, "2026-07-20T21:00:00+09:00", "週のフィードバック", None
+    )
+    _insert_v1_legacy_feedback(
         path,
         "after_meal",
         day,
@@ -344,20 +357,22 @@ def test_migration_keeps_only_latest_advice_per_period(tmp_path: Path) -> None:
         "食後のフィードバック",
         1,
     )
-    _insert_v1_advice(path, "after_meal", day, "2026-07-20T13:00:00+09:00", "消えた食事", 999)
+    _insert_v1_legacy_feedback(
+        path, "after_meal", day, "2026-07-20T13:00:00+09:00", "消えた食事", 999
+    )
 
     _ = migrate(path)
 
     with connect(path) as connection:
         rows = [
             (
-                cast(str, row["advice_type"]),
+                cast(str, row["feedback_type"]),
                 cast(str, row["summary"]),
                 cast(int | None, row["meal_id"]),
             )
             for row in cast(
                 list[sqlite3.Row],
-                connection.execute("SELECT * FROM advice_history ORDER BY id").fetchall(),
+                connection.execute("SELECT * FROM feedback_history ORDER BY id").fetchall(),
             )
         ]
 
@@ -366,6 +381,14 @@ def test_migration_keeps_only_latest_advice_per_period(tmp_path: Path) -> None:
         ("7day", "週のフィードバック", None),
         ("after_meal", "食後のフィードバック", 1),
     ], "期間ごとに最新1件だけを残し、食事が消えた食後フィードバックは捨てる"
+    with connect(path) as connection:
+        old_table = cast(
+            sqlite3.Row | None,
+            connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'advice_history'"
+            ).fetchone(),
+        )
+    assert old_table is None
 
 
 def test_migration_is_not_reapplied(tmp_path: Path) -> None:
@@ -380,7 +403,7 @@ def test_initialize_migrates_existing_db(tmp_path: Path) -> None:
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
 
-    assert initialize(path) == [2, 3, 4, 5, 6, 7, 8, 9]
+    assert initialize(path) == [2, 3, 4, 5, 6, 7, 8, 9, 10]
     assert schema_version(path) == SCHEMA_VERSION
 
 

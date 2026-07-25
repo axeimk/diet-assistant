@@ -17,8 +17,8 @@ description: diet-assistantの記録から日次・週次レポートを作成�
    日付が明示された場合だけ `--date <YYYY-MM-DD>` を加える:
 
    ```bash
-   diet advice today     # 日次。findings と保存済みフィードバックが返る
-   diet advice weekly    # 週次（直近7日）
+   diet feedback today     # 日次。findings と保存済みフィードバックが返る
+   diet feedback weekly    # 週次（直近7日）
    ```
 
 3. `findings` からフィードバックを書く。書き方は下の「フィードバックの書き方」に従う。
@@ -27,8 +27,8 @@ description: diet-assistantの記録から日次・週次レポートを作成�
 4. 書いたフィードバックを保存する。JSONファイルに書いてから渡す:
 
    ```bash
-   diet advice save --json /tmp/advice.json                          # 日次
-   diet advice save --json /tmp/advice.json --kind period --days 7   # 週次
+   diet feedback save --json /tmp/feedback.json                          # 日次
+   diet feedback save --json /tmp/feedback.json --kind period --days 7   # 週次
    ```
 
    使える項目は `situation`・`priority_action`（必須）と
@@ -74,7 +74,7 @@ findings は優先順位の高い順に並んでいる。**先頭のfindingを�
 - **カロリーが超過しているときに追加摂取を勧めない。** `calorie_headroom` が0以下なら
   不足の解消は置き換えだけ。栄養素を満たすために食べ足すフィードバックは書かない。
 - 単日の値で断定せず、`sample_days` が小さいfindingは「まだ判断材料が少ない」と添える。
-- 文面は `config/profile.json` の `advice_preference`（自由記述のフィードバック方針。
+- 文面は `config/profile.json` の `feedback_preference`（自由記述のフィードバック方針。
   例: 「まずは継続可能な変更を優先」）に沿わせる。未設定なら平坦に書く。
 - 医療的な判断をしない。体調や疾病に関わる話は専門家への相談を促すにとどめる。
 
@@ -105,7 +105,7 @@ findings は優先順位の高い順に並んでいる。**先頭のfindingを�
 - 記録の追加・修正はこのスキルの範囲外。レポート中に明らかな記録漏れを見つけても
   黙って直さず、事実として指摘するにとどめる。
 - 同じ日・同じ期間のフィードバックは上書きされる（種別・期間ごとに最新1件だけ保持。ADR 0010）。
-  書き直したら `diet advice save` をもう一度実行し、レポートを再生成する。
+  書き直したら `diet feedback save` をもう一度実行し、レポートを再生成する。
 - `--date` のタイムゾーンは記録の `eaten_at` とローカル時刻に依存する。
   `config/profile.json` の `day_start_time` より前の記録は前日のレポートへ入る。
   「今日の食事が出ない」ように見えたら、暦日だけでなくこの境界も確認する。

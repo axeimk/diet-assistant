@@ -125,7 +125,7 @@ def weekly_trend(
 
 def daily_html(
     summary: DailySummary,
-    advice: dict[str, object] | None,
+    feedback: dict[str, object] | None,
     findings: Sequence[Finding],
     goal_evaluation: dict[str, object] | None,
     trend: list[DailyTrendPoint],
@@ -137,7 +137,7 @@ def daily_html(
         period_label=summary["date"],
         report_kind="daily",
         summary=summary,
-        advice=advice,
+        feedback=feedback,
         goal_evaluation=goal_evaluation,
         trend=trend,
         finding_lines=findings_markdown(findings),
@@ -148,7 +148,7 @@ def daily_html(
 
 def weekly_html(
     summary: PeriodSummary,
-    advice: dict[str, object] | None,
+    feedback: dict[str, object] | None,
     findings: Sequence[Finding],
     trend: list[WeeklyTrendPoint],
 ) -> str:
@@ -159,7 +159,7 @@ def weekly_html(
         period_label=f"{summary['period_start']} — {summary['period_end']}",
         report_kind="weekly",
         summary=summary,
-        advice=advice,
+        feedback=feedback,
         finding_lines=findings_markdown(findings),
         trend=trend,
     )

@@ -47,11 +47,11 @@
     <h2><span class="sheet__index">1</span>来週の最優先行動</h2>
   </div>
   <div class="statement">
-    {% if advice %}
-    <p class="statement__lead">{{ advice.situation }}</p>
-    <p class="statement__action">{{ advice.priority_action }}</p>
+    {% if feedback %}
+    <p class="statement__lead">{{ feedback.situation }}</p>
+    <p class="statement__action">{{ feedback.priority_action }}</p>
     {% else %}
-    <p class="note">フィードバックは未記載です。分析結果から書いて <code>diet advice save</code> で保存してください。</p>
+    <p class="note">フィードバックは未記載です。分析結果から書いて <code>diet feedback save</code> で保存してください。</p>
     {% endif %}
   </div>
   <ul class="findings">
@@ -59,11 +59,11 @@
     <li>{{ line[2:] }}</li>
     {% endfor %}
   </ul>
-  {% if advice %}
+  {% if feedback %}
   <dl class="pairs pairs--spaced pairs--prose">
-    <div><dt>代替案</dt><dd>{{ advice.alternative or "（未記載）" }}</dd></div>
-    <div><dt>計画変更</dt><dd>{{ advice.plan_change or "（未記載）" }}</dd></div>
-    <div><dt>続けたい点</dt><dd>{{ advice.keep or "（未記載）" }}</dd></div>
+    <div><dt>代替案</dt><dd>{{ feedback.alternative or "（未記載）" }}</dd></div>
+    <div><dt>計画変更</dt><dd>{{ feedback.plan_change or "（未記載）" }}</dd></div>
+    <div><dt>続けたい点</dt><dd>{{ feedback.keep or "（未記載）" }}</dd></div>
   </dl>
   {% endif %}
 </section>

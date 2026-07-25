@@ -42,11 +42,11 @@ CLI / Codex / iPhone inbox JSON
 | `exercises` | 運動 | 種目ごとの任意属性 |
 | `body_metrics` | 身体測定 | 体重・体脂肪率・胴囲 |
 | `intake_entries` | 共通取り込み | external_id一意、状態遷移と結果ID |
-| `advice_history` | フィードバック | 種別・期間・対象食事ごとに最新1件を保存 |
+| `feedback_history` | フィードバック | 種別・期間・対象食事ごとに最新1件を保存 |
 
 ## CLI設計
 
-要求された`init`、`doctor`、`profile`、`goal`、`meal`、`exercise`、`metric`、`inbox`、`report`、`advice`、`backup`、`photo`の全コマンド群を設ける。出力は原則JSONで、失敗はJSONを標準エラーへ出して終了コード2を返す。レポートはMarkdown保存、JSON出力、Chart.jsを埋め込んだ自己完結HTMLの保存に対応する。HTMLは生成後に既定ブラウザで開き、`--no-open`で起動を抑止できる。破壊的な食事・運動削除は`--yes`、写真削除は`--apply`が必要。
+要求された`init`、`doctor`、`profile`、`goal`、`meal`、`exercise`、`metric`、`inbox`、`report`、`feedback`、`backup`、`photo`の全コマンド群を設ける。出力は原則JSONで、失敗はJSONを標準エラーへ出して終了コード2を返す。レポートはMarkdown保存、JSON出力、Chart.jsを埋め込んだ自己完結HTMLの保存に対応する。HTMLは生成後に既定ブラウザで開き、`--no-open`で起動を抑止できる。破壊的な食事・運動削除は`--yes`、写真削除は`--apply`が必要。
 
 ## MVPと将来拡張
 

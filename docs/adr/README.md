@@ -55,8 +55,9 @@
 | [0007](0007-unrecorded-values-are-missing.md) | 未記録の値をゼロとして集計しない | 承認済み |
 | [0008](0008-report-design-language.md) | HTMLレポートは面ではなく罫線で構造を作り、系列色は実測と参照の2色に固定する | 承認済み |
 | [0009](0009-goal-deletion-is-logical.md) | 目標の削除は論理削除にし、planは残す | 承認済み |
-| [0010](0010-advice-history-keeps-latest-only.md) | フィードバックは種別・期間ごとに最新1件だけを保持する | 承認済み |
+| [0010](0010-feedback-history-keeps-latest-only.md) | フィードバックは種別・期間ごとに最新1件だけを保持する | 承認済み |
 | [0011](0011-agent-read-only-profile-fields.md) | プロフィールにはエージェントだけが読む項目を置き、読む手順とセットで足す | 承認済み（一部を0013が置換） |
 | [0012](0012-migrations-verified-by-test-not-mirrored-files.md) | マイグレーションの記録は`migrations/*.sql`をやめ、スキーマ一致テストで保証する | 承認済み |
-| [0013](0013-agent-writes-advice-cli-owns-findings.md) | フィードバックの文面はエージェントが書き、CLIは分析結果（findings）だけを正本として持つ | 承認済み |
+| [0013](0013-agent-writes-feedback-cli-owns-findings.md) | フィードバックの文面はエージェントが書き、CLIは分析結果（findings）だけを正本として持つ | 承認済み |
 | [0014](0014-nutrient-targets-from-dietary-reference-intakes.md) | 栄養素の目安は食事摂取基準からコードで導出し、カロリー超過中は増量方向のフィードバックを出さない | 承認済み |
+| [0015](0015-feedback-is-the-canonical-implementation-name.md) | フィードバックの実装名も`feedback`に統一する | 承認済み |

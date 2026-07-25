@@ -14,7 +14,7 @@ import pytest
 
 from diet_assistant.db import connect
 from diet_assistant.repository import add_meal, list_rows
-from diet_assistant.services.advice import latest_advice, meal_day_context, save_advice
+from diet_assistant.services.feedback import latest_feedback, meal_day_context, save_feedback
 
 PROFILE: dict[str, object] = {
     "height_cm": 175,
@@ -29,8 +29,8 @@ TEXT: dict[str, object] = {
 }
 
 
-def _advice_rows(path: Path) -> list[dict[str, object]]:
-    return list_rows(path, "advice_history", order_by="id")
+def _feedback_rows(path: Path) -> list[dict[str, object]]:
+    return list_rows(path, "feedback_history", order_by="id")
 
 
 def _meal(path: Path, eaten_at: str, calories: float) -> dict[str, object]:
@@ -44,58 +44,58 @@ def _meal(path: Path, eaten_at: str, calories: float) -> dict[str, object]:
     )
 
 
-def test_daily_advice_keeps_one_row_per_day(db_path: Path) -> None:
+def test_daily_feedback_keeps_one_row_per_day(db_path: Path) -> None:
     day = date(2026, 7, 21)
-    _ = save_advice(db_path, TEXT, kind="daily", day=day, profile=PROFILE)
+    _ = save_feedback(db_path, TEXT, kind="daily", day=day, profile=PROFILE)
     _ = _meal(db_path, "2026-07-21T12:00:00+09:00", 600)
-    latest = save_advice(
+    latest = save_feedback(
         db_path, {**TEXT, "situation": "書き直した"}, kind="daily", day=day, profile=PROFILE
     )
 
-    rows = _advice_rows(db_path)
+    rows = _feedback_rows(db_path)
 
     assert len(rows) == 1, "同じ日の日次フィードバックは追記せず上書きする"
     assert rows[0]["summary"] == latest["situation"] == "書き直した"
-    assert rows[0]["advice_type"] == "daily"
+    assert rows[0]["feedback_type"] == "daily"
 
 
-def test_daily_advice_is_separate_per_day(db_path: Path) -> None:
-    _ = save_advice(db_path, TEXT, kind="daily", day=date(2026, 7, 21), profile=PROFILE)
-    _ = save_advice(db_path, TEXT, kind="daily", day=date(2026, 7, 22), profile=PROFILE)
+def test_daily_feedback_is_separate_per_day(db_path: Path) -> None:
+    _ = save_feedback(db_path, TEXT, kind="daily", day=date(2026, 7, 21), profile=PROFILE)
+    _ = save_feedback(db_path, TEXT, kind="daily", day=date(2026, 7, 22), profile=PROFILE)
 
-    assert len(_advice_rows(db_path)) == 2
+    assert len(_feedback_rows(db_path)) == 2
 
 
-def test_period_advice_keeps_one_row_per_period(db_path: Path) -> None:
+def test_period_feedback_keeps_one_row_per_period(db_path: Path) -> None:
     day = date(2026, 7, 21)
-    _ = save_advice(db_path, TEXT, kind="period", day=day, days=7, profile=PROFILE)
-    _ = save_advice(db_path, TEXT, kind="period", day=day, days=7, profile=PROFILE)
-    _ = save_advice(db_path, TEXT, kind="period", day=day, days=14, profile=PROFILE)
+    _ = save_feedback(db_path, TEXT, kind="period", day=day, days=7, profile=PROFILE)
+    _ = save_feedback(db_path, TEXT, kind="period", day=day, days=7, profile=PROFILE)
+    _ = save_feedback(db_path, TEXT, kind="period", day=day, days=14, profile=PROFILE)
 
-    rows = _advice_rows(db_path)
+    rows = _feedback_rows(db_path)
 
-    assert [row["advice_type"] for row in rows] == ["7day", "14day"]
+    assert [row["feedback_type"] for row in rows] == ["7day", "14day"]
     assert rows[0]["period_start"] == "2026-07-15"
     assert rows[0]["period_end"] == "2026-07-21"
 
 
-def test_period_advice_does_not_collide_with_daily_advice(db_path: Path) -> None:
+def test_period_feedback_does_not_collide_with_daily_feedback(db_path: Path) -> None:
     day = date(2026, 7, 21)
-    _ = save_advice(db_path, TEXT, kind="daily", day=day, profile=PROFILE)
-    _ = save_advice(db_path, TEXT, kind="period", day=day, days=1, profile=PROFILE)
+    _ = save_feedback(db_path, TEXT, kind="daily", day=day, profile=PROFILE)
+    _ = save_feedback(db_path, TEXT, kind="period", day=day, days=1, profile=PROFILE)
 
-    assert len(_advice_rows(db_path)) == 2, "日次と1日期間のフィードバックは別種として残る"
+    assert len(_feedback_rows(db_path)) == 2, "日次と1日期間のフィードバックは別種として残る"
 
 
-def test_meal_advice_is_kept_per_meal(db_path: Path) -> None:
+def test_meal_feedback_is_kept_per_meal(db_path: Path) -> None:
     first = _meal(db_path, "2026-07-21T08:00:00+09:00", 400)
     second = _meal(db_path, "2026-07-21T12:00:00+09:00", 600)
     day = date(2026, 7, 21)
     first_id = cast(int, first["id"])
     second_id = cast(int, second["id"])
-    _ = save_advice(db_path, TEXT, kind="after_meal", day=day, meal_id=first_id, profile=PROFILE)
-    _ = save_advice(db_path, TEXT, kind="after_meal", day=day, meal_id=second_id, profile=PROFILE)
-    latest = save_advice(
+    _ = save_feedback(db_path, TEXT, kind="after_meal", day=day, meal_id=first_id, profile=PROFILE)
+    _ = save_feedback(db_path, TEXT, kind="after_meal", day=day, meal_id=second_id, profile=PROFILE)
+    latest = save_feedback(
         db_path,
         {**TEXT, "situation": "上書き"},
         kind="after_meal",
@@ -104,16 +104,16 @@ def test_meal_advice_is_kept_per_meal(db_path: Path) -> None:
         profile=PROFILE,
     )
 
-    rows = _advice_rows(db_path)
+    rows = _feedback_rows(db_path)
 
     assert len(rows) == 2, "食事ごとに1行、同じ食事の再生成は上書きする"
     assert [row["meal_id"] for row in rows] == [first_id, second_id]
     assert rows[0]["summary"] == latest["situation"]
 
 
-def test_meal_advice_is_removed_with_its_meal(db_path: Path) -> None:
+def test_meal_feedback_is_removed_with_its_meal(db_path: Path) -> None:
     meal = _meal(db_path, "2026-07-21T08:00:00+09:00", 400)
-    _ = save_advice(
+    _ = save_feedback(
         db_path,
         TEXT,
         kind="after_meal",
@@ -126,7 +126,7 @@ def test_meal_advice_is_removed_with_its_meal(db_path: Path) -> None:
         with connection:
             _ = connection.execute("DELETE FROM meals WHERE id = ?", (meal["id"],))
 
-    assert _advice_rows(db_path) == [], "食事を削除したらその食後フィードバックも残さない"
+    assert _feedback_rows(db_path) == [], "食事を削除したらその食後フィードバックも残さない"
 
 
 def test_evidence_is_computed_by_the_cli_not_supplied_by_the_writer(db_path: Path) -> None:
@@ -135,7 +135,7 @@ def test_evidence_is_computed_by_the_cli_not_supplied_by_the_writer(db_path: Pat
         _ = _meal(db_path, f"2026-07-{day:02d}T12:00:00+09:00", 2500)
 
     with pytest.raises(ValueError, match="evidence"):
-        _ = save_advice(
+        _ = save_feedback(
             db_path,
             {**TEXT, "evidence": "捏造した根拠"},
             kind="period",
@@ -144,11 +144,11 @@ def test_evidence_is_computed_by_the_cli_not_supplied_by_the_writer(db_path: Pat
             profile=PROFILE,
         )
 
-    result = save_advice(
+    result = save_feedback(
         db_path, TEXT, kind="period", day=date(2026, 7, 21), days=7, profile=PROFILE
     )
 
-    row = _advice_rows(db_path)[0]
+    row = _feedback_rows(db_path)[0]
     evidence = cast(list[dict[str, object]], json.loads(cast(str, row["evidence"])))
     assert [f["kind"] for f in evidence], "findingsが根拠として保存される"
     assert result["evidence"] == evidence
@@ -156,7 +156,7 @@ def test_evidence_is_computed_by_the_cli_not_supplied_by_the_writer(db_path: Pat
 
 def test_required_text_keys_are_enforced(db_path: Path) -> None:
     with pytest.raises(ValueError, match="priority_action"):
-        _ = save_advice(
+        _ = save_feedback(
             db_path, {"situation": "状況だけ"}, kind="daily", day=date(2026, 7, 21), profile=PROFILE
         )
 
@@ -164,7 +164,7 @@ def test_required_text_keys_are_enforced(db_path: Path) -> None:
 def test_unknown_text_keys_are_rejected(db_path: Path) -> None:
     """項目名の取り違えを黙って捨てない。"""
     with pytest.raises(ValueError, match="priority"):
-        _ = save_advice(
+        _ = save_feedback(
             db_path,
             {**TEXT, "priority": "最優先"},
             kind="daily",
@@ -173,26 +173,26 @@ def test_unknown_text_keys_are_rejected(db_path: Path) -> None:
         )
 
 
-def test_latest_advice_reads_back_what_was_written(db_path: Path) -> None:
+def test_latest_feedback_reads_back_what_was_written(db_path: Path) -> None:
     day = date(2026, 7, 21)
     text: dict[str, object] = {**TEXT, "alternative": "主食を少し減らす", "plan_change": "変更なし"}
-    _ = save_advice(db_path, text, kind="period", day=day, days=7, profile=PROFILE)
+    _ = save_feedback(db_path, text, kind="period", day=day, days=7, profile=PROFILE)
 
-    stored = latest_advice(db_path, kind="period", day=day, days=7)
+    stored = latest_feedback(db_path, kind="period", day=day, days=7)
 
     assert stored is not None
     assert stored["situation"] == text["situation"]
     assert stored["alternative"] == "主食を少し減らす"
-    assert latest_advice(db_path, kind="daily", day=day) is None
+    assert latest_feedback(db_path, kind="daily", day=day) is None
 
 
-def test_cli_written_advice_is_not_read_back_as_advice(db_path: Path) -> None:
+def test_cli_written_feedback_is_not_read_back_as_feedback(db_path: Path) -> None:
     """旧実装がCLIで生成した文面は、フィードバックとして埋め込まない（ADR 0013）。"""
     day = date(2026, 7, 21)
     with connect(db_path) as connection:
         with connection:
             _ = connection.execute(
-                "INSERT INTO advice_history (generated_at, advice_type, period_start, "
+                "INSERT INTO feedback_history (generated_at, feedback_type, period_start, "
                 + "period_end, summary, details, evidence, priority, written_by) "
                 + "VALUES (?, 'daily', ?, ?, '旧定型文', ?, '{}', 'normal', 'cli')",
                 (
@@ -203,13 +203,13 @@ def test_cli_written_advice_is_not_read_back_as_advice(db_path: Path) -> None:
                 ),
             )
 
-    assert latest_advice(db_path, kind="daily", day=day) is None
+    assert latest_feedback(db_path, kind="daily", day=day) is None
 
-    _ = save_advice(db_path, TEXT, kind="daily", day=day, profile=PROFILE)
-    stored = latest_advice(db_path, kind="daily", day=day)
+    _ = save_feedback(db_path, TEXT, kind="daily", day=day, profile=PROFILE)
+    stored = latest_feedback(db_path, kind="daily", day=day)
 
     assert stored is not None and stored["situation"] == TEXT["situation"]
-    assert len(_advice_rows(db_path)) == 1, "同じ期間の行は上書きされる"
+    assert len(_feedback_rows(db_path)) == 1, "同じ期間の行は上書きされる"
 
 
 def test_meal_day_context_reports_the_remaining_budget(db_path: Path) -> None:
@@ -225,21 +225,21 @@ def test_meal_day_context_reports_the_remaining_budget(db_path: Path) -> None:
     assert "priority_action" not in context
 
 
-def test_advice_history_rejects_duplicate_key(db_path: Path) -> None:
-    _ = save_advice(db_path, TEXT, kind="daily", day=date(2026, 7, 21), profile=PROFILE)
-    row = _advice_rows(db_path)[0]
+def test_feedback_history_rejects_duplicate_key(db_path: Path) -> None:
+    _ = save_feedback(db_path, TEXT, kind="daily", day=date(2026, 7, 21), profile=PROFILE)
+    row = _feedback_rows(db_path)[0]
 
     with connect(db_path) as connection:
         try:
             with connection:
                 _ = connection.execute(
-                    "INSERT INTO advice_history "
-                    + "(generated_at, advice_type, period_start, period_end, "
+                    "INSERT INTO feedback_history "
+                    + "(generated_at, feedback_type, period_start, period_end, "
                     + "summary, details, evidence, priority) "
                     + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         row["generated_at"],
-                        row["advice_type"],
+                        row["feedback_type"],
                         row["period_start"],
                         row["period_end"],
                         row["summary"],

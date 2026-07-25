@@ -109,14 +109,14 @@ description: diet-assistantへ食事を記録する標準手順。写真・テ�
    足りない栄養素は次の食事での置き換えとして言う（ADR 0014）。
 
 フィードバックの文面は自分が書く（CLIは文面を作らない。ADR 0013）。`config/profile.json` の
-`advice_preference`（自由記述のフィードバック方針。例: 「まずは継続可能な変更を優先」）に沿わせる。
+`feedback_preference`（自由記述のフィードバック方針。例: 「まずは継続可能な変更を優先」）に沿わせる。
 未設定なら平坦に書く。数値は `day_context` にあるものだけを使い、
 測っていない頻度や品目の傾向を推測で書かない。
 
 食後のフィードバックを記録として残す場合は、JSONに書いて保存する:
 
 ```bash
-diet advice save --json /tmp/advice.json --kind after_meal --meal-id <id> --date <レポート日>
+diet feedback save --json /tmp/feedback.json --kind after_meal --meal-id <id> --date <レポート日>
 ```
 
 ## 注意点

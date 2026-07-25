@@ -1,6 +1,6 @@
 ---
 name: verify
-description: diet-assistant（SQLite正本の個人向けダイエット記録CLI）の変更を、実際に`diet`コマンドを起動・操作して確認するためのレシピ。CLI・リポジトリ層・サービス層（intake / reporting / advice / planning / maintenance）・スキーマを変更したときに、報告の前にこの手順で動作を確かめる。
+description: diet-assistant（SQLite正本の個人向けダイエット記録CLI）の変更を、実際に`diet`コマンドを起動・操作して確認するためのレシピ。CLI・リポジトリ層・サービス層（intake / reporting / feedback / planning / maintenance）・スキーマを変更したときに、報告の前にこの手順で動作を確かめる。
 ---
 
 # verify — diet-assistant の動作確認レシピ
@@ -103,30 +103,30 @@ diet --root "$DIET_VERIFY_ROOT" goal recalculate 1
 ```bash
 diet --root "$DIET_VERIFY_ROOT" report daily --date 2026-07-21 --format json
 diet --root "$DIET_VERIFY_ROOT" report weekly --date 2026-07-21 --format json
-diet --root "$DIET_VERIFY_ROOT" advice today --date 2026-07-21
-diet --root "$DIET_VERIFY_ROOT" advice weekly --date 2026-07-21
+diet --root "$DIET_VERIFY_ROOT" feedback today --date 2026-07-21
+diet --root "$DIET_VERIFY_ROOT" feedback weekly --date 2026-07-21
 ```
 
 期待: 上で登録した食事・運動が `daily` の `meals` / `exercises` に現れ、`totals` に反映される。
 範囲が不明な食事は `uncertain_meal_ids` に入る。`nutrients` には記録した栄養素だけが入り、
 未記録の栄養素はキーを作らない（ゼロとして不足扱いにしない）。
-`advice` は `findings` を返し、文面（`situation`・`priority_action`）を返さない。
+`feedback` は `findings` を返し、文面（`situation`・`priority_action`）を返さない。
 Markdown 形式（`--format` 省略時）では `$DIET_VERIFY_ROOT/reports/daily/` に
 ファイルが生成され、栄養素の行が「52.0 g（目安 53.6〜82.5 g / −1.6）」の形になることも確認する。
 
-### フィードバックの保存とレポートへの反映（services/advice.py）
+### フィードバックの保存とレポートへの反映（services/feedback.py）
 
 ```bash
-cat > "$DIET_VERIFY_ROOT/advice.json" <<'JSON'
+cat > "$DIET_VERIFY_ROOT/feedback.json" <<'JSON'
 {"situation":"検証用の状況","priority_action":"検証用の行動","keep":"記録が続いている",
  "alternative":"代替案","plan_change":"変更なし"}
 JSON
-diet --root "$DIET_VERIFY_ROOT" advice save --json "$DIET_VERIFY_ROOT/advice.json" \
+diet --root "$DIET_VERIFY_ROOT" feedback save --json "$DIET_VERIFY_ROOT/feedback.json" \
   --kind period --days 7 --date 2026-07-21
 diet --root "$DIET_VERIFY_ROOT" report weekly --date 2026-07-21
 ```
 
-期待: `advice save` の戻り値の `evidence` にfindingsが入る（渡していないのにCLIが計算する）。
+期待: `feedback save` の戻り値の `evidence` にfindingsが入る（渡していないのにCLIが計算する）。
 生成された週次Markdownに「検証用の行動」が埋め込まれ、
 「フィードバックは未記載」が消えること。
 保存前のレポートには「フィードバックは未記載」と「## 分析結果」が出ること。

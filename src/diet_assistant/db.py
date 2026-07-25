@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -150,6 +150,14 @@ ALTER TABLE advice_history ADD COLUMN written_by TEXT NOT NULL DEFAULT 'agent'
     CHECK(written_by IN ('cli','agent'));
 UPDATE advice_history SET written_by = 'cli';
 """,
+    # 正規用語に合わせてフィードバック履歴のテーブル・列・索引名を変更する。
+    10: """
+ALTER TABLE advice_history RENAME TO feedback_history;
+ALTER TABLE feedback_history RENAME COLUMN advice_type TO feedback_type;
+DROP INDEX advice_history_key;
+CREATE UNIQUE INDEX feedback_history_key
+    ON feedback_history(feedback_type, period_start, period_end, COALESCE(meal_id, 0));
+""",
 }
 
 
@@ -283,10 +291,10 @@ CREATE TABLE IF NOT EXISTS intake_entries (
 );
 CREATE INDEX IF NOT EXISTS intake_status ON intake_entries(status);
 
-CREATE TABLE IF NOT EXISTS advice_history (
+CREATE TABLE IF NOT EXISTS feedback_history (
     id INTEGER PRIMARY KEY,
     generated_at TEXT NOT NULL,
-    advice_type TEXT NOT NULL,
+    feedback_type TEXT NOT NULL,
     meal_id INTEGER REFERENCES meals(id) ON DELETE CASCADE,
     period_start TEXT NOT NULL,
     period_end TEXT NOT NULL,
@@ -298,6 +306,6 @@ CREATE TABLE IF NOT EXISTS advice_history (
     written_by TEXT NOT NULL DEFAULT 'agent' CHECK(written_by IN ('cli','agent'))
 );
 -- フィードバックは種別・期間（食後は対象の食事）ごとに最新の1件だけを保持する。
-CREATE UNIQUE INDEX IF NOT EXISTS advice_history_key
-    ON advice_history(advice_type, period_start, period_end, COALESCE(meal_id, 0));
+CREATE UNIQUE INDEX IF NOT EXISTS feedback_history_key
+    ON feedback_history(feedback_type, period_start, period_end, COALESCE(meal_id, 0));
 """

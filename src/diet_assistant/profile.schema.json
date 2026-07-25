@@ -55,7 +55,7 @@
       "maximum": 10,
       "description": "1日の食事回数の目安。"
     },
-    "advice_preference": {
+    "feedback_preference": {
       "type": "string",
       "description": "フィードバックの方針。エージェントが読む自由記述。"
     },

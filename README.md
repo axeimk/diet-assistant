@@ -68,14 +68,14 @@ diet profile validate
 | `meals_per_day` | 1〜10の整数 | 食事登録後に残り食数と1食あたりの目安を計算。**未設定なら3** |
 | `dietary_restrictions` | 文字列の配列 | 食事記録時にエージェントが品目と照合し、該当しそうなら一言添える |
 | `allergies` | 文字列の配列 | 同上。断定せず「〜の可能性がある」と伝える |
-| `advice_preference` | 文字列（自由記述） | エージェントが自分の言葉で書くフィードバックの方針 |
+| `feedback_preference` | 文字列（自由記述） | エージェントが自分の言葉で書くフィードバックの方針 |
 | `routine` | ステップ名の配列 | 1日のルーティーン（実施順）。記録・レポート時に先行ステップの抜けを確認 |
 | `day_start_time` | `HH:MM` | レポート上の一日の開始時刻。開始前の記録は前日分に含める。**未設定なら00:00** |
 | `timezone` | IANAタイムゾーン名 | **現在は未使用**。日時はOSのタイムゾーンで扱う |
 
 `height_cm`・`birth_date`・`sex`・`activity_level`が揃い、`sex`が`female`または`male`なら、目標の追加・再計算時にMifflin–St Jeor式で暫定維持カロリーを計算します。`meals_per_day`は食事登録後の目安、`photo_retention_days`は写真整理に使います。
 
-`dietary_restrictions`・`allergies`・`advice_preference`は`routine`と同じく、CLIのコードではなくエージェントだけが読む項目です。食事を記録するとき、エージェントは推定した品目を食事制限とアレルギーに照合し、該当しそうなものがあれば記録はそのまま行ったうえで「衣に小麦が含まれている可能性があります」のように一言添えます（写真やメニュー名からは断定できないためです）。症状や対処には踏み込みません。`advice_preference`（例: 「まずは継続可能な変更を優先」）は、エージェントが書くフィードバックの方針です。フィードバックの文面はエージェントが書くので、この方針が反映されます。CLIが計算した数値（レポートの集計と`findings`）は書き換えません。
+`dietary_restrictions`・`allergies`・`feedback_preference`は`routine`と同じく、CLIのコードではなくエージェントだけが読む項目です。食事を記録するとき、エージェントは推定した品目を食事制限とアレルギーに照合し、該当しそうなものがあれば記録はそのまま行ったうえで「衣に小麦が含まれている可能性があります」のように一言添えます（写真やメニュー名からは断定できないためです）。症状や対処には踏み込みません。`feedback_preference`（例: 「まずは継続可能な変更を優先」）は、エージェントが書くフィードバックの方針です。フィードバックの文面はエージェントが書くので、この方針が反映されます。CLIが計算した数値（レポートの集計と`findings`）は書き換えません。
 
 `routine`は1日のステップ（`weight`・`breakfast`・`lunch`・`snack`・`dinner`・`exercise`・`report`）を実施順に並べたものです。時刻は持ちません。設定しておくと、エージェントが記録やレポートの依頼を受けたときに当日の記録と照合し、先行ステップに抜けがあれば「朝食はどうでしたか？」のように一言だけ確認します。`snack`は食べない日があるのが普通なので、抜けていても確認されません。CLIのコードは参照せず、エージェントだけが読みます。
 
@@ -140,7 +140,6 @@ diet profile validate
 行動を提案せず、不足している記録を事実として伝えます。
 
 フィードバックの文面はエージェントが書き、根拠となる数値とfindingsはCLIが計算します。
-既存CLIとの互換性を保つため、コマンド名と内部の保存名には技術名として`advice`が残っています。
 
 ### 振り返る
 
@@ -168,9 +167,9 @@ diet report weekly --format html
 フィードバックの文面はエージェントが書きます。CLIは分析結果（findings）だけを計算し、文面を作りません。
 
 ```bash
-diet advice today     # findings（分析結果）を返す
-diet advice weekly
-diet advice save --json advice.json --kind period --days 7   # 書いたフィードバックを保存する
+diet feedback today     # findings（分析結果）を返す
+diet feedback weekly
+diet feedback save --json feedback.json --kind period --days 7   # 書いたフィードバックを保存する
 ```
 
 各findingは実測値・参照値・参照根拠・根拠にした日数を持ちます。順位はカロリー管理を栄養素より優先し（`goal`→`calorie`→`nutrition`）、摂取が目標を超えているときは栄養素の不足を追加摂取ではなく置き換えとして扱います。栄養素を満たすために食べ足すフィードバックは生成されません。
@@ -276,7 +275,7 @@ DB、画像、プロフィール、バックアップ、生成レポート、環
 | `goal`            | `add` `list` `show` `activate` `recalculate` `evaluate` `update` `delete` |
 | `inbox`           | `import` `list` `retry`                                        |
 | `report`          | `daily` `weekly`（`--date` `--format markdown/json/html` `--stdout` `--no-open`） |
-| `advice`          | `today` `weekly`（`--date` `--days`）・`save`（`--json` `--kind` `--days` `--meal-id` `--date`） |
+| `feedback`          | `today` `weekly`（`--date` `--days`）・`save`（`--json` `--kind` `--days` `--meal-id` `--date`） |
 | `backup`          | `create` `list`                                                |
 | `photo`           | `cleanup`（`--days` `--apply`）                                |
 

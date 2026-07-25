@@ -36,7 +36,7 @@ TEXT_KEYS = (
 REQUIRED_TEXT_KEYS = ("situation", "priority_action")
 
 
-def save_advice(
+def save_feedback(
     path: Path,
     text: dict[str, object],
     *,
@@ -49,7 +49,7 @@ def save_advice(
     """エージェントが書いたフィードバックを保存する。根拠はここで計算して付ける。"""
     _validate_text(text)
     day_start = profile_day_start_time(profile or {})
-    advice_type = _advice_type(kind, days)
+    feedback_type = _feedback_type(kind, days)
     period_start = day - timedelta(days=days - 1) if kind == "period" else day
     evidence: object
     if kind == "after_meal":
@@ -67,10 +67,10 @@ def save_advice(
     result: dict[str, object] = {**text, "evidence": evidence}
     _ = upsert(
         path,
-        "advice_history",
+        "feedback_history",
         {
             "generated_at": now_iso(),
-            "advice_type": advice_type,
+            "feedback_type": feedback_type,
             "meal_id": meal_id,
             "period_start": period_start.isoformat(),
             "period_end": day.isoformat(),
@@ -80,12 +80,12 @@ def save_advice(
             "priority": "normal",
             "written_by": "agent",
         },
-        conflict=("advice_type", "period_start", "period_end", "COALESCE(meal_id, 0)"),
+        conflict=("feedback_type", "period_start", "period_end", "COALESCE(meal_id, 0)"),
     )
     return result
 
 
-def latest_advice(
+def latest_feedback(
     path: Path,
     *,
     kind: Kind,
@@ -94,15 +94,15 @@ def latest_advice(
     meal_id: int | None = None,
 ) -> dict[str, object] | None:
     """保存済みのフィードバック。レポートはこれを埋め込み、無ければfindingsの事実だけを載せる。"""
-    advice_type = _advice_type(kind, days)
+    feedback_type = _feedback_type(kind, days)
     period_start = day - timedelta(days=days - 1) if kind == "period" else day
     with connect(path) as connection:
         row = cast(
             sqlite3.Row | None,
             connection.execute(
-                "SELECT details FROM advice_history WHERE advice_type = ? AND period_start = ? "
+                "SELECT details FROM feedback_history WHERE feedback_type = ? AND period_start = ? "
                 + "AND period_end = ? AND COALESCE(meal_id, 0) = ? AND written_by = 'agent'",
-                (advice_type, period_start.isoformat(), day.isoformat(), meal_id or 0),
+                (feedback_type, period_start.isoformat(), day.isoformat(), meal_id or 0),
             ).fetchone(),
         )
     if row is None:
@@ -151,7 +151,7 @@ def _meal_evidence(
     }
 
 
-def _advice_type(kind: Kind, days: int) -> str:
+def _feedback_type(kind: Kind, days: int) -> str:
     if kind == "daily":
         return "daily"
     if kind == "after_meal":

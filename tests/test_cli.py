@@ -159,7 +159,7 @@ def test_meal_and_daily_report_include_goal_based_numbers(
     report_output = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
     goal_evaluation = cast(dict[str, object], report_output["goal_evaluation"])
     report_findings = cast(list[dict[str, object]], report_output["findings"])
-    assert report_output["advice"] is None, "フィードバックはエージェントが書くまで空"
+    assert report_output["feedback"] is None, "フィードバックはエージェントが書くまで空"
     assert [f for f in report_findings if f["group"] == "calorie"]
     assert goal_evaluation["evaluation_window_days"] == 7
 
@@ -494,10 +494,10 @@ def test_daily_report_says_target_is_unset_without_profile(
     assert "- たんぱく質: 20.0 g（目安未設定）" in report
 
 
-def test_advice_returns_findings_and_report_embeds_the_saved_text(
+def test_feedback_returns_findings_and_report_embeds_the_saved_text(
     tmp_path: Path, capsys: CaptureFixture[str]
 ) -> None:
-    """diet advice はfindingsを返し、文面はエージェントが書いてsaveし、reportが埋め込む。"""
+    """diet feedback はfindingsを返し、文面はエージェントが書いてsaveし、reportが埋め込む。"""
     root_args = ["--root", str(tmp_path)]
     _ = _setup_goal_with_profile(tmp_path, capsys)
     today = date.today()
@@ -523,19 +523,19 @@ def test_advice_returns_findings_and_report_embeds_the_saved_text(
         )
     _ = capsys.readouterr()
 
-    assert main([*root_args, "advice", "weekly", "--date", today.isoformat()]) == 0
-    advice_output = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
-    result_findings = cast(list[dict[str, object]], advice_output["findings"])
+    assert main([*root_args, "feedback", "weekly", "--date", today.isoformat()]) == 0
+    feedback_output = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
+    result_findings = cast(list[dict[str, object]], feedback_output["findings"])
 
-    assert advice_output["saved_advice"] is None
-    assert "situation" not in advice_output, "CLIは文面を返さない（ADR 0013）"
+    assert feedback_output["saved_feedback"] is None
+    assert "situation" not in feedback_output, "CLIは文面を返さない（ADR 0013）"
     kinds = [f["kind"] for f in result_findings]
     assert "calorie_average_above_target" in kinds
     assert "sodium_above_target" in kinds
     assert result_findings[0]["group"] == "calorie", "カロリーが栄養素より先に来る"
 
-    advice_file = tmp_path / "advice.json"
-    _ = advice_file.write_text(
+    feedback_file = tmp_path / "feedback.json"
+    _ = feedback_file.write_text(
         json.dumps(
             {
                 "situation": "平均が目標上限を超えている",
@@ -552,10 +552,10 @@ def test_advice_returns_findings_and_report_embeds_the_saved_text(
         main(
             [
                 *root_args,
-                "advice",
+                "feedback",
                 "save",
                 "--json",
-                str(advice_file),
+                str(feedback_file),
                 "--kind",
                 "period",
                 "--days",
@@ -595,17 +595,17 @@ def test_weekly_report_says_feedback_is_unwritten_before_it_is_saved(
     assert "## 分析結果" in report
 
 
-def test_advice_save_rejects_wrong_keys(tmp_path: Path, capsys: CaptureFixture[str]) -> None:
+def test_feedback_save_rejects_wrong_keys(tmp_path: Path, capsys: CaptureFixture[str]) -> None:
     root_args = ["--root", str(tmp_path)]
     assert main([*root_args, "init"]) == 0
     _ = capsys.readouterr()
-    advice_file = tmp_path / "advice.json"
-    _ = advice_file.write_text(
+    feedback_file = tmp_path / "feedback.json"
+    _ = feedback_file.write_text(
         json.dumps({"situation": "状況", "priority": "最優先"}, ensure_ascii=False),
         encoding="utf-8",
     )
 
-    assert main([*root_args, "advice", "save", "--json", str(advice_file)]) == 2
+    assert main([*root_args, "feedback", "save", "--json", str(feedback_file)]) == 2
     assert "priority" in json.loads(capsys.readouterr().err)["error"]
 
 

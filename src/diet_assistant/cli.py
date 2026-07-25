@@ -25,8 +25,8 @@ from .repository import (
     soft_delete_goal,
     update,
 )
-from .services.advice import Kind, latest_advice, meal_day_context, save_advice
 from .services.analysis import findings
+from .services.feedback import Kind, latest_feedback, meal_day_context, save_feedback
 from .services.html_reporting import daily_html, daily_trend, weekly_html, weekly_trend
 from .services.intake import import_directory, process_entry
 from .services.maintenance import cleanup_candidates, cleanup_photos, create_backup
@@ -238,19 +238,19 @@ def build_parser() -> argparse.ArgumentParser:
         _ = p.add_argument("--format", choices=["markdown", "json", "html"], default="markdown")
         _ = p.add_argument("--stdout", action="store_true")
         _ = p.add_argument("--no-open", action="store_true")
-    advice = commands.add_parser("advice").add_subparsers(dest="action", required=True)
+    feedback = commands.add_parser("feedback").add_subparsers(dest="action", required=True)
     for action in ("today", "weekly"):
-        p = advice.add_parser(action)
+        p = feedback.add_parser(action)
         _ = p.add_argument("--date")
         _ = p.add_argument("--days", type=int, default=7)
-    advice_save = advice.add_parser("save")
-    _ = advice_save.add_argument("--json", type=Path, required=True)
-    _ = advice_save.add_argument("--date")
-    _ = advice_save.add_argument(
+    feedback_save = feedback.add_parser("save")
+    _ = feedback_save.add_argument("--json", type=Path, required=True)
+    _ = feedback_save.add_argument("--date")
+    _ = feedback_save.add_argument(
         "--kind", choices=["daily", "period", "after_meal"], default="daily"
     )
-    _ = advice_save.add_argument("--days", type=int, default=7)
-    _ = advice_save.add_argument("--meal-id", type=int)
+    _ = feedback_save.add_argument("--days", type=int, default=7)
+    _ = feedback_save.add_argument("--meal-id", type=int)
     backup = commands.add_parser("backup").add_subparsers(dest="action", required=True)
     _ = backup.add_parser("create")
     _ = backup.add_parser("list")
@@ -321,8 +321,8 @@ def run(args: CliArgs) -> object:
         return process_entry(p["db"], args.id, temporary_dir=p["temporary"])
     if command == "report":
         return _report(args, p)
-    if command == "advice":
-        return _advice(args, p)
+    if command == "feedback":
+        return _feedback(args, p)
     if command == "backup":
         if action == "create":
             return {"path": str(create_backup(p["db"], p["backup"]))}
@@ -565,7 +565,7 @@ def _report(args: CliArgs, p: dict[str, Path]) -> object:
     if args.action == "daily":
         summary = daily_summary(p["db"], day, day_start=day_start)
         result_findings = findings(p["db"], day, 1, profile=profile, day_start=day_start)
-        advice = latest_advice(p["db"], kind="daily", day=day)
+        feedback = latest_feedback(p["db"], kind="daily", day=day)
         goal_evaluation = evaluate_active_goal(
             p["db"], evaluation_date=day, day_start=day_start
         )
@@ -573,37 +573,37 @@ def _report(args: CliArgs, p: dict[str, Path]) -> object:
             return {
                 **summary,
                 "findings": result_findings,
-                "advice": advice,
+                "feedback": feedback,
                 "goal_evaluation": goal_evaluation,
             }
         if args.format == "html":
             content = daily_html(
                 summary,
-                advice,
+                feedback,
                 result_findings,
                 goal_evaluation,
                 daily_trend(p["db"], day, day_start=day_start),
             )
             output = p["daily"] / f"{day}.html"
         else:
-            content = daily_markdown(summary, advice, result_findings, goal_evaluation)
+            content = daily_markdown(summary, feedback, result_findings, goal_evaluation)
             output = p["daily"] / f"{day}.md"
     else:
         summary = weekly_summary(p["db"], day, day_start=day_start)
         result_findings = findings(p["db"], day, 7, profile=profile, day_start=day_start)
-        advice = latest_advice(p["db"], kind="period", day=day, days=7)
+        feedback = latest_feedback(p["db"], kind="period", day=day, days=7)
         if args.format == "json":
-            return {"summary": summary, "findings": result_findings, "advice": advice}
+            return {"summary": summary, "findings": result_findings, "feedback": feedback}
         if args.format == "html":
             content = weekly_html(
                 summary,
-                advice,
+                feedback,
                 result_findings,
                 weekly_trend(p["db"], day, day_start=day_start),
             )
             output = p["weekly"] / f"{day}.html"
         else:
-            content = weekly_markdown(summary, advice, result_findings)
+            content = weekly_markdown(summary, feedback, result_findings)
             output = p["weekly"] / f"{day}.md"
     if args.stdout:
         return {args.format: content}
@@ -624,7 +624,7 @@ def _report(args: CliArgs, p: dict[str, Path]) -> object:
     return result
 
 
-def _advice(args: CliArgs, p: dict[str, Path]) -> object:
+def _feedback(args: CliArgs, p: dict[str, Path]) -> object:
     profile = load_profile(p["profile"])
     day_start = profile_day_start_time(profile)
     day = _report_date(args.date, day_start)
@@ -632,7 +632,7 @@ def _advice(args: CliArgs, p: dict[str, Path]) -> object:
         if args.json is None:
             raise ValueError("--json が必要です")
         kind = cast(Kind, args.kind)
-        return save_advice(
+        return save_feedback(
             p["db"],
             read_json(args.json),
             kind=kind,
@@ -648,7 +648,7 @@ def _advice(args: CliArgs, p: dict[str, Path]) -> object:
         "period_end": day.isoformat(),
         "days": days,
         "findings": findings(p["db"], day, days, profile=profile, day_start=day_start),
-        "saved_advice": latest_advice(p["db"], kind=kind, day=day, days=days),
+        "saved_feedback": latest_feedback(p["db"], kind=kind, day=day, days=days),
     }
 
 
