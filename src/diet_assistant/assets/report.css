@@ -11,6 +11,9 @@
   --wash: #f1efe8;
   --series-measured: #2a78d6;
   --series-reference: #eb6834;
+  /* 状態色。緑と橙は色覚によっては見分けにくいので、必ず語と記号を添えて使う。 */
+  --status-good: #1a6b1a;
+  --status-warn: #8a5300;
   --serif: "Hiragino Mincho ProN", "Yu Mincho", YuMincho, "Noto Serif JP", "Songti SC",
     serif;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic UI",
@@ -29,6 +32,8 @@
     --wash: #1e1e1c;
     --series-measured: #3987e5;
     --series-reference: #d95926;
+    --status-good: #5cb85c;
+    --status-warn: #d9a441;
   }
 }
 
@@ -374,6 +379,56 @@ table {
 .pairs--split {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 2.5rem;
+}
+
+/* 栄養素の達成状態。色だけに意味を持たせず、記号と語を必ず並べる。 */
+.nutrient {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.nutrient__amount {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.nutrient__status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.nutrient__status::before {
+  margin-right: 0.25em;
+  font-weight: 400;
+}
+
+.nutrient .note {
+  line-height: 1.5;
+}
+
+.nutrient--within .nutrient__status {
+  color: var(--status-good);
+}
+
+.nutrient--within .nutrient__status::before {
+  content: "✓";
+}
+
+.nutrient--below .nutrient__status,
+.nutrient--above .nutrient__status {
+  color: var(--status-warn);
+}
+
+.nutrient--below .nutrient__status::before {
+  content: "↓";
+}
+
+.nutrient--above .nutrient__status::before {
+  content: "↑";
 }
 
 .pairs--spaced {

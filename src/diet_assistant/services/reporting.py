@@ -253,6 +253,14 @@ NUTRIENT_LABELS: dict[str, NutrientKey] = {
 }
 
 
+# 目安に対する状態の呼び方。findingsの名称（*_below_target など）と同じ語を使う。
+NUTRIENT_STATUS_LABELS: dict[str, str] = {
+    "below": "不足",
+    "within": "範囲内",
+    "above": "超過",
+}
+
+
 def nutrient_reference(comparison: NutrientComparison) -> str:
     """「目安 7.5 g未満 / +3.4」のような、目安と差の表示。MarkdownとHTMLで共用する。"""
     return f"目安 {_range_text(comparison)} / {_signed(comparison['difference'])}"

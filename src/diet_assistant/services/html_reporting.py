@@ -13,6 +13,7 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from .finding import Finding
 from .reporting import (
     NUTRIENT_LABELS,
+    NUTRIENT_STATUS_LABELS,
     DailySummary,
     PeriodSummary,
     findings_markdown,
@@ -172,6 +173,7 @@ def daily_html(
         finding_lines=findings_markdown(findings),
         nutrient_labels=list(NUTRIENT_LABELS.items()),
         nutrient_reference=nutrient_reference,
+        nutrient_status_labels=NUTRIENT_STATUS_LABELS,
     )
 
 

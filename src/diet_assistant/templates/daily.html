@@ -164,17 +164,21 @@
       {% if summary.meals %}
       <dl class="pairs">
         {% for label, name in nutrient_labels %}
+        {% set comparison = summary.nutrients.get(name) if name in summary.recorded_nutrients else none %}
         <div>
           <dt>{{ label }}</dt>
-          <dd>
+          <dd{% if comparison %} class="nutrient nutrient--{{ comparison.status }}"{% endif %}>
             {% if name not in summary.recorded_nutrients %}
-            記録なし
+            <span class="note">記録なし</span>
+            {% elif comparison %}
+            <span class="nutrient__amount">
+              {{ "%.1f" | format(totals[name]) }} {{ comparison.unit }}
+              <span class="nutrient__status">{{ nutrient_status_labels[comparison.status] }}</span>
+            </span>
+            <span class="note">{{ nutrient_reference(comparison) }}</span>
             {% else %}
             {{ "%.1f" | format(totals[name]) }} g
-            {% set comparison = summary.nutrients.get(name) %}
-            {% if comparison %}
-            <span class="note">{{ nutrient_reference(comparison) }}</span>
-            {% endif %}
+            <span class="note">目安未設定</span>
             {% endif %}
           </dd>
         </div>

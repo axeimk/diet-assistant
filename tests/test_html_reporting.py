@@ -1,9 +1,31 @@
 from datetime import date
 from pathlib import Path
+from typing import Literal
 
 from diet_assistant.repository import add_meal, insert
-from diet_assistant.services.html_reporting import daily_trend, weekly_trend
+from diet_assistant.services.html_reporting import daily_html, daily_trend, weekly_trend
+from diet_assistant.services.nutrition import NutrientComparison
+from diet_assistant.services.reporting import daily_summary
 from diet_assistant.util import now_iso
+
+
+def _comparison(
+    actual: float,
+    *,
+    minimum: float | None,
+    maximum: float | None,
+    status: Literal["below", "within", "above"],
+    difference: float,
+) -> NutrientComparison:
+    return {
+        "actual": actual,
+        "minimum": minimum,
+        "maximum": maximum,
+        "unit": "g",
+        "basis": "テスト",
+        "status": status,
+        "difference": difference,
+    }
 
 
 def _add_metric(path: Path, measured_at: str, weight: float) -> None:
@@ -70,6 +92,57 @@ def test_daily_trend_preserves_missing_values_and_requires_three_weights(
     assert trend[-1]["weight_moving_average"] == 69.8
     assert trend[-3]["weight_moving_average"] is None
     assert trend[-1]["exercise_minutes"] is None
+
+
+def test_daily_html_marks_each_nutrient_status(db_path: Path) -> None:
+    _ = add_meal(
+        db_path,
+        {
+            "eaten_at": "2026-07-21T12:00:00+09:00",
+            "meal_type": "lunch",
+            "estimated_calories": 1500,
+            "protein": 52.0,
+            "fiber": 21.0,
+            "sodium": 9.2,
+        },
+    )
+    summary = daily_summary(db_path, date(2026, 7, 21))
+    summary["recorded_nutrients"] = ["protein", "fiber", "sodium"]
+    summary["nutrients"] = {
+        "protein": _comparison(52.0, minimum=60.0, maximum=90.0, status="below", difference=-8.0),
+        "fiber": _comparison(21.0, minimum=20.0, maximum=None, status="within", difference=0.0),
+        "sodium": _comparison(9.2, minimum=None, maximum=7.5, status="above", difference=1.7),
+    }
+
+    html = daily_html(summary, None, [], None, [])
+
+    nutrition = html.split("栄養集計", 1)[1]
+    assert 'class="nutrient nutrient--below"' in nutrition
+    assert 'class="nutrient nutrient--within"' in nutrition
+    assert 'class="nutrient nutrient--above"' in nutrition
+    assert "不足" in nutrition
+    assert "範囲内" in nutrition
+    assert "超過" in nutrition
+
+
+def test_daily_html_omits_nutrient_status_without_reference(db_path: Path) -> None:
+    _ = add_meal(
+        db_path,
+        {
+            "eaten_at": "2026-07-21T12:00:00+09:00",
+            "meal_type": "lunch",
+            "estimated_calories": 1500,
+            "protein": 52.0,
+        },
+    )
+    summary = daily_summary(db_path, date(2026, 7, 21))
+    summary["recorded_nutrients"] = ["protein"]
+
+    html = daily_html(summary, None, [], None, [])
+
+    nutrition = html.split("栄養集計", 1)[1]
+    assert "nutrient--" not in nutrition
+    assert "目安未設定" in nutrition
 
 
 def test_daily_trend_drops_leading_days_without_records(db_path: Path) -> None:
