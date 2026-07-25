@@ -1,6 +1,6 @@
-"""助言の保存と読み出し。
+"""フィードバックの保存と読み出し。
 
-助言の文面はエージェントが書く。CLIは文面を生成せず、保存と、根拠（findings）の
+フィードバックの文面はエージェントが書く。CLIは文面を生成せず、保存と、根拠（findings）の
 添付だけを行う（ADR 0013）。根拠は保存時にこちらで計算するので、書き手が数値を
 差し替えることはできない。
 """
@@ -46,7 +46,7 @@ def save_advice(
     meal_id: int | None = None,
     profile: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    """エージェントが書いた助言を保存する。根拠はここで計算して付ける。"""
+    """エージェントが書いたフィードバックを保存する。根拠はここで計算して付ける。"""
     _validate_text(text)
     day_start = profile_day_start_time(profile or {})
     advice_type = _advice_type(kind, days)
@@ -54,7 +54,7 @@ def save_advice(
     evidence: object
     if kind == "after_meal":
         if meal_id is None:
-            raise ValueError("食後の助言には meal_id が必要です")
+            raise ValueError("食後のフィードバックには meal_id が必要です")
         evidence = _meal_evidence(path, meal_id, day, profile or {}, day_start=day_start)
     else:
         evidence = findings(
@@ -93,7 +93,7 @@ def latest_advice(
     days: int = 1,
     meal_id: int | None = None,
 ) -> dict[str, object] | None:
-    """保存済みの助言。レポートはこれを埋め込み、無ければfindingsの事実だけを載せる。"""
+    """保存済みのフィードバック。レポートはこれを埋め込み、無ければfindingsの事実だけを載せる。"""
     advice_type = _advice_type(kind, days)
     period_start = day - timedelta(days=days - 1) if kind == "period" else day
     with connect(path) as connection:
@@ -162,9 +162,11 @@ def _advice_type(kind: Kind, days: int) -> str:
 def _validate_text(text: dict[str, object]) -> None:
     unknown = sorted(key for key in text if key not in TEXT_KEYS)
     if unknown:
+        invalid_keys = ", ".join(unknown)
+        valid_keys = ", ".join(TEXT_KEYS)
         raise ValueError(
-            f"助言に使えない項目です: {', '.join(unknown)}（使える項目: {', '.join(TEXT_KEYS)}）"
+            f"フィードバックに使えない項目です: {invalid_keys}（使える項目: {valid_keys}）"
         )
     missing = [key for key in REQUIRED_TEXT_KEYS if not text.get(key)]
     if missing:
-        raise ValueError(f"助言には {', '.join(missing)} が必要です")
+        raise ValueError(f"フィードバックには {', '.join(missing)} が必要です")

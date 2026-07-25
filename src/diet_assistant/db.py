@@ -89,8 +89,8 @@ ALTER TABLE meal_items ADD COLUMN fiber REAL CHECK(fiber >= 0);
     5: """
 ALTER TABLE goals ADD COLUMN deleted_at TEXT;
 """,
-    # 助言履歴を「種別・期間ごとに最新1件」へ作り直す。重複していた過去の行は最新だけを残し、
-    # 食事が既に削除されている食後助言は捨てる。
+    # フィードバック履歴を「種別・期間ごとに最新1件」へ作り直す。
+    # 重複していた過去の行は最新だけを残し、食事が既に削除されている食後分は捨てる。
     6: """
 CREATE TABLE advice_history_rebuilt (
     id INTEGER PRIMARY KEY,
@@ -143,7 +143,7 @@ ALTER TABLE plans DROP COLUMN protein_target;
 ALTER TABLE plans ADD COLUMN nutrient_targets TEXT;
 ALTER TABLE plans ADD COLUMN basis_weight REAL CHECK(basis_weight > 0);
 """,
-    # 助言の書き手を区別する。旧実装がCLIで生成した定型文は履歴として残すが、
+    # フィードバックの書き手を区別する。旧実装がCLIで生成した定型文は履歴として残すが、
     # レポートには埋め込まない（ADR 0013）。
     9: """
 ALTER TABLE advice_history ADD COLUMN written_by TEXT NOT NULL DEFAULT 'agent'
@@ -297,7 +297,7 @@ CREATE TABLE IF NOT EXISTS advice_history (
     -- 文面の書き手。CLIが生成した過去の定型文（cli）はレポートへ埋め込まない。
     written_by TEXT NOT NULL DEFAULT 'agent' CHECK(written_by IN ('cli','agent'))
 );
--- 助言は種別・期間（食後助言は対象の食事）ごとに最新の1件だけを保持する。
+-- フィードバックは種別・期間（食後は対象の食事）ごとに最新の1件だけを保持する。
 CREATE UNIQUE INDEX IF NOT EXISTS advice_history_key
     ON advice_history(advice_type, period_start, period_end, COALESCE(meal_id, 0));
 """

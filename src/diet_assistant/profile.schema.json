@@ -37,7 +37,7 @@
     "day_start_time": {
       "type": "string",
       "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
-      "description": "記録上の一日の開始時刻（HH:MM）。日次・週次レポートと助言の集計境界に使う。未設定なら00:00。"
+      "description": "記録上の一日の開始時刻（HH:MM）。日次・週次レポートとフィードバックの集計境界に使う。未設定なら00:00。"
     },
     "dietary_restrictions": {
       "type": "array",
@@ -57,7 +57,7 @@
     },
     "advice_preference": {
       "type": "string",
-      "description": "助言の方針。エージェントが読む自由記述。"
+      "description": "フィードバックの方針。エージェントが読む自由記述。"
     },
     "routine": {
       "type": "array",

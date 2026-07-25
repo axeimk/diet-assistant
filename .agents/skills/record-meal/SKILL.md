@@ -101,19 +101,19 @@ description: diet-assistantへ食事を記録する標準手順。写真・テ�
 2. **目標に対する現在地**: `day_context` の `consumed_calories`・`target_daily_calories`・
    `remaining_calories`・`remaining_meals` を数値で示す。
    目標未設定・プロフィール不足でCLIが計算できないときは、その旨だけ伝える。
-3. **一言評価と助言**: 行動はひとつだけ。`day_context` の `nutrients`
+3. **短いフィードバック**: 行動はひとつだけ。`day_context` の `nutrients`
    （記録済み栄養素と目安との差）に目立つ偏りがあれば事実として添える。
    順調な日はまずそれを認める。残り摂取可能カロリーが少ない・超過している日でも、
    極端な制限や翌日での相殺は提案しない（7日以上の傾向で判断する）。
    **`remaining_calories` が0以下のときに、栄養素を満たすための追加摂取を勧めない。**
    足りない栄養素は次の食事での置き換えとして言う（ADR 0014）。
 
-助言の文面は自分が書く（CLIは文面を作らない。ADR 0013）。`config/profile.json` の
-`advice_preference`（自由記述の助言方針。例: 「まずは継続可能な変更を優先」）に沿わせる。
+フィードバックの文面は自分が書く（CLIは文面を作らない。ADR 0013）。`config/profile.json` の
+`advice_preference`（自由記述のフィードバック方針。例: 「まずは継続可能な変更を優先」）に沿わせる。
 未設定なら平坦に書く。数値は `day_context` にあるものだけを使い、
 測っていない頻度や品目の傾向を推測で書かない。
 
-食後の一言を記録として残す場合は、JSONに書いて保存する:
+食後のフィードバックを記録として残す場合は、JSONに書いて保存する:
 
 ```bash
 diet advice save --json /tmp/advice.json --kind after_meal --meal-id <id> --date <レポート日>

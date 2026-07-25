@@ -284,8 +284,8 @@ def _amount(value: float) -> str:
 
 
 _WRITE_HINT = "の分析結果から書いて `diet advice save` で保存する）"
-_UNWRITTEN_DAILY = "（助言は未記載。`diet advice today` " + _WRITE_HINT
-_UNWRITTEN_WEEKLY = "- （助言は未記載。`diet advice weekly` " + _WRITE_HINT
+_UNWRITTEN_DAILY = "（フィードバックは未記載。`diet advice today` " + _WRITE_HINT
+_UNWRITTEN_WEEKLY = "- （フィードバックは未記載。`diet advice weekly` " + _WRITE_HINT
 
 FINDING_LABELS = {
     "meal_records_missing": "食事記録のある日数",
@@ -306,7 +306,7 @@ _NUTRIENT_STATUS_SUFFIX = {
 
 
 def findings_markdown(findings: Sequence[Finding]) -> list[str]:
-    """findingsを数値の箇条書きにする。助言の文面ではなく事実だけを並べる。"""
+    """findingsを数値の箇条書きにする。フィードバックの文面ではなく事実だけを並べる。"""
     return [_finding_line(finding) for finding in findings] or ["- 判断できる記録がありません"]
 
 
@@ -429,7 +429,7 @@ def daily_markdown(
             f"- 体重: {weight_text}",
             f"- 目標との差: {difference_text}",
             "",
-            "## 短い助言",
+            "## 短いフィードバック",
             *advice_lines,
             "",
             "## 分析結果",
@@ -444,7 +444,7 @@ def daily_markdown(
 
 
 def _advice_item(advice: dict[str, object] | None, key: str) -> str:
-    """保存済み助言の項目。未記載なら捏造せず、未記載と書く。"""
+    """保存済みフィードバックの項目。未記載なら捏造せず、未記載と書く。"""
     if advice is None:
         return _UNWRITTEN_WEEKLY
     value = advice.get(key)

@@ -17,7 +17,7 @@
 CLI / Codex / iPhone inbox JSON
              │
              ▼
-       application services ── 計画・集計・助言・取り込み・保守
+       application services ── 計画・集計・フィードバック・取り込み・保守
              │
              ▼
           repository ───────── CRUDとトランザクション
@@ -42,7 +42,7 @@ CLI / Codex / iPhone inbox JSON
 | `exercises` | 運動 | 種目ごとの任意属性 |
 | `body_metrics` | 身体測定 | 体重・体脂肪率・胴囲 |
 | `intake_entries` | 共通取り込み | external_id一意、状態遷移と結果ID |
-| `advice_history` | 助言 | 種別・期間・対象食事ごとに最新1件を保存 |
+| `advice_history` | フィードバック | 種別・期間・対象食事ごとに最新1件を保存 |
 
 ## CLI設計
 
@@ -50,4 +50,4 @@ CLI / Codex / iPhone inbox JSON
 
 ## MVPと将来拡張
 
-MVPは手動・JSON入力、inbox取り込み、CRUD、目標ペース、プロフィールから求める暫定維持カロリーと摂取目標、評価期間の平均体重による目標判定、日次・週次集計、定型助言、静的HTMLを含むレポート、バックアップ、写真整理を扱う。画像認識API、食品データベース連携、実績トレンドによる維持カロリー補正、YAML読込、動的なWeb/モバイルアプリ、クラウド同期は将来拡張とする。
+MVPは手動・JSON入力、inbox取り込み、CRUD、目標ペース、プロフィールから求める暫定維持カロリーと摂取目標、評価期間の平均体重による目標判定、日次・週次集計、フィードバック、静的HTMLを含むレポート、バックアップ、写真整理を扱う。画像認識API、食品データベース連携、実績トレンドによる維持カロリー補正、YAML読込、動的なWeb/モバイルアプリ、クラウド同期は将来拡張とする。

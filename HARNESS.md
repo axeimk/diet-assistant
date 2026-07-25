@@ -9,7 +9,7 @@
 - tdd スキル: 導入済み（`.agents/skills/tdd/` が実体、`.claude/skills/tdd` は symlink。2026-07-25 ユーザー判断）
 - domain-modeling スキル: 導入済み（`.agents/skills/domain-modeling/` が実体、`.claude/skills/domain-modeling` は symlink）
 - grilling スキル: 導入済み（`.agents/skills/grilling/` が実体、`.claude/skills/grilling` は symlink。2026-07-25 ユーザー判断）
-- CONTEXT.md（用語集）: 保留。最初の用語が確定した時点で作る（2026-07-21 ユーザー判断。「使わない」ではないので、その時点で提案してよい）
+- CONTEXT.md（用語集）: 作成済み（2026-07-26。「フィードバック」を最初の正規用語として登録）
 - ADR（設計記録）: 導入済み（`docs/adr/`）
 - permissions / hooks: 導入済み
   - Claude Code: `.claude/settings.json`。permissions（pytest / ruff / basedpyright / `diet --root` / 読み取り系 git）と hooks（`PostToolUse` で編集した `.py` に `ruff check`）

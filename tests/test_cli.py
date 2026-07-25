@@ -159,7 +159,7 @@ def test_meal_and_daily_report_include_goal_based_numbers(
     report_output = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
     goal_evaluation = cast(dict[str, object], report_output["goal_evaluation"])
     report_findings = cast(list[dict[str, object]], report_output["findings"])
-    assert report_output["advice"] is None, "助言はエージェントが書くまで空"
+    assert report_output["advice"] is None, "フィードバックはエージェントが書くまで空"
     assert [f for f in report_findings if f["group"] == "calorie"]
     assert goal_evaluation["evaluation_window_days"] == 7
 
@@ -457,6 +457,8 @@ def test_daily_report_compares_nutrients_with_targets(
     html = (tmp_path / f"reports/daily/{today}.html").read_text(encoding="utf-8")
     assert "目安 7.5 g未満 / +3.4" in html
     assert "<dt>脂質</dt>" in html
+    assert "フィードバックは未記載" in html
+    assert "助言" not in html
 
 
 def test_daily_report_says_target_is_unset_without_profile(
@@ -573,10 +575,11 @@ def test_advice_returns_findings_and_report_embeds_the_saved_text(
     assert "- 夕食の主菜を1品減らす" in report
     assert "- 記録が7日続いている" in report
     assert "[指摘] 平均摂取カロリー（目標上限超過）" in report
-    assert "助言は未記載" not in report
+    assert "フィードバックは未記載" not in report
+    assert "助言" not in report
 
 
-def test_weekly_report_says_advice_is_unwritten_before_it_is_saved(
+def test_weekly_report_says_feedback_is_unwritten_before_it_is_saved(
     tmp_path: Path, capsys: CaptureFixture[str]
 ) -> None:
     root_args = ["--root", str(tmp_path)]
@@ -587,7 +590,8 @@ def test_weekly_report_says_advice_is_unwritten_before_it_is_saved(
     _ = capsys.readouterr()
     report = (tmp_path / "reports/weekly/2026-07-21.md").read_text(encoding="utf-8")
 
-    assert "助言は未記載" in report
+    assert "フィードバックは未記載" in report
+    assert "助言" not in report
     assert "## 分析結果" in report
 
 

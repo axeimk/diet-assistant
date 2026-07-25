@@ -1,6 +1,6 @@
-"""助言の保存と読み出しのテスト。
+"""フィードバックの保存と読み出しのテスト。
 
-助言の文面はエージェントが書き、CLIは保存とfindingsの添付だけを行う（ADR 0013）。
+フィードバックの文面はエージェントが書き、CLIは保存とfindingsの添付だけを行う（ADR 0013）。
 種別・期間ごとに最新1件だけを保持する規則（ADR 0010）は変わらない。
 """
 
@@ -54,7 +54,7 @@ def test_daily_advice_keeps_one_row_per_day(db_path: Path) -> None:
 
     rows = _advice_rows(db_path)
 
-    assert len(rows) == 1, "同じ日の日次助言は追記せず上書きする"
+    assert len(rows) == 1, "同じ日の日次フィードバックは追記せず上書きする"
     assert rows[0]["summary"] == latest["situation"] == "書き直した"
     assert rows[0]["advice_type"] == "daily"
 
@@ -84,7 +84,7 @@ def test_period_advice_does_not_collide_with_daily_advice(db_path: Path) -> None
     _ = save_advice(db_path, TEXT, kind="daily", day=day, profile=PROFILE)
     _ = save_advice(db_path, TEXT, kind="period", day=day, days=1, profile=PROFILE)
 
-    assert len(_advice_rows(db_path)) == 2, "日次助言と1日期間の助言は別種として残る"
+    assert len(_advice_rows(db_path)) == 2, "日次と1日期間のフィードバックは別種として残る"
 
 
 def test_meal_advice_is_kept_per_meal(db_path: Path) -> None:
@@ -126,7 +126,7 @@ def test_meal_advice_is_removed_with_its_meal(db_path: Path) -> None:
         with connection:
             _ = connection.execute("DELETE FROM meals WHERE id = ?", (meal["id"],))
 
-    assert _advice_rows(db_path) == [], "食事を削除したらその食後助言も残さない"
+    assert _advice_rows(db_path) == [], "食事を削除したらその食後フィードバックも残さない"
 
 
 def test_evidence_is_computed_by_the_cli_not_supplied_by_the_writer(db_path: Path) -> None:
@@ -187,7 +187,7 @@ def test_latest_advice_reads_back_what_was_written(db_path: Path) -> None:
 
 
 def test_cli_written_advice_is_not_read_back_as_advice(db_path: Path) -> None:
-    """旧実装がCLIで生成した文面は、助言としてレポートへ埋め込まない（ADR 0013）。"""
+    """旧実装がCLIで生成した文面は、フィードバックとして埋め込まない（ADR 0013）。"""
     day = date(2026, 7, 21)
     with connect(db_path) as connection:
         with connection:
@@ -250,4 +250,4 @@ def test_advice_history_rejects_duplicate_key(db_path: Path) -> None:
                 )
         except sqlite3.IntegrityError:
             return
-    raise AssertionError("同じ種別・期間の助言を二重に挿入できてはいけない")
+    raise AssertionError("同じ種別・期間のフィードバックを二重に挿入できてはいけない")

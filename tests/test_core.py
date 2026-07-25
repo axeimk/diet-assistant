@@ -294,7 +294,7 @@ def test_migration_adds_nutrient_targets_and_basis_weight(tmp_path: Path) -> Non
 
 
 def test_migration_marks_existing_advice_as_cli_written(tmp_path: Path) -> None:
-    """旧実装がCLIで生成した助言は消さず、書き手を`cli`として残す（ADR 0013）。"""
+    """旧実装がCLIで生成したフィードバックは消さず、書き手を`cli`として残す。"""
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
     _insert_v1_advice(path, "7day", "2026-07-20", "2026-07-20T21:00:00+09:00", "旧定型文", None)
@@ -333,10 +333,17 @@ def test_migration_keeps_only_latest_advice_per_period(tmp_path: Path) -> None:
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
     day = "2026-07-20"
-    _insert_v1_advice(path, "daily", day, "2026-07-20T09:00:00+09:00", "朝の助言", None)
-    _insert_v1_advice(path, "daily", day, "2026-07-20T21:00:00+09:00", "夜の助言", None)
-    _insert_v1_advice(path, "7day", day, "2026-07-20T21:00:00+09:00", "週の助言", None)
-    _insert_v1_advice(path, "after_meal", day, "2026-07-20T12:30:00+09:00", "食後の助言", 1)
+    _insert_v1_advice(path, "daily", day, "2026-07-20T09:00:00+09:00", "朝のフィードバック", None)
+    _insert_v1_advice(path, "daily", day, "2026-07-20T21:00:00+09:00", "夜のフィードバック", None)
+    _insert_v1_advice(path, "7day", day, "2026-07-20T21:00:00+09:00", "週のフィードバック", None)
+    _insert_v1_advice(
+        path,
+        "after_meal",
+        day,
+        "2026-07-20T12:30:00+09:00",
+        "食後のフィードバック",
+        1,
+    )
     _insert_v1_advice(path, "after_meal", day, "2026-07-20T13:00:00+09:00", "消えた食事", 999)
 
     _ = migrate(path)
@@ -355,10 +362,10 @@ def test_migration_keeps_only_latest_advice_per_period(tmp_path: Path) -> None:
         ]
 
     assert rows == [
-        ("daily", "夜の助言", None),
-        ("7day", "週の助言", None),
-        ("after_meal", "食後の助言", 1),
-    ], "期間ごとに最新1件だけを残し、食事が消えた食後助言は捨てる"
+        ("daily", "夜のフィードバック", None),
+        ("7day", "週のフィードバック", None),
+        ("after_meal", "食後のフィードバック", 1),
+    ], "期間ごとに最新1件だけを残し、食事が消えた食後フィードバックは捨てる"
 
 
 def test_migration_is_not_reapplied(tmp_path: Path) -> None:
