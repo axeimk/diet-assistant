@@ -57,7 +57,11 @@
           padding: 16,
           color: palette.secondary,
           // 推定範囲の帯は装飾であって系列ではないので凡例に出さない。
-          filter: (item, data) => !data.datasets[item.datasetIndex].chrome,
+          // 1点も無い系列も、あるかのように見えるので出さない（目標未設定のときの「目標」など）。
+          filter: (item, data) => {
+            const dataset = data.datasets[item.datasetIndex];
+            return !dataset.chrome && hasValue(dataset.data);
+          },
         },
       },
       tooltip: {
@@ -70,7 +74,7 @@
         boxWidth: 8,
         boxHeight: 8,
         usePointStyle: true,
-        filter: (item) => !item.dataset.chrome,
+        filter: (item) => !item.dataset.chrome && hasValue(item.dataset.data),
         callbacks: {
           label(context) {
             const value = context.parsed.y;

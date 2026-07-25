@@ -23,9 +23,9 @@ from .reporting import (
 )
 
 # 記録が始まる前の空白でグラフが潰れないよう、記録の無い先頭を落として表示する。
-# ただし点が数個だけの折れ線は傾向に見えないので、最低限の幅は残す。
-MIN_TREND_DAYS = 7
-MIN_TREND_WEEKS = 4
+# 最初の記録の1つ前まで残して線が左端に張り付くのを避け、点が1つだけの図にはしない。
+TREND_MARGIN_POINTS = 1
+MIN_TREND_POINTS = 3
 
 
 class StatusBadge(TypedDict):
@@ -158,7 +158,7 @@ def daily_trend(
             }
         )
     # 移動平均は範囲外の日も使うので、絞り込みは全期間を組み立てた後に行う。
-    return _trim_leading_gap(result, _has_daily_record, MIN_TREND_DAYS)
+    return _trim_leading_gap(result, _has_daily_record)
 
 
 def _has_daily_record(point: DailyTrendPoint) -> bool:
@@ -175,13 +175,12 @@ def _has_weekly_record(point: WeeklyTrendPoint) -> bool:
     )
 
 
-def _trim_leading_gap[T](
-    points: list[T], has_record: Callable[[T], bool], minimum: int
-) -> list[T]:
+def _trim_leading_gap[T](points: list[T], has_record: Callable[[T], bool]) -> list[T]:
     first = next((index for index, point in enumerate(points) if has_record(point)), None)
     if first is None:
         return points
-    return points[min(first, max(0, len(points) - minimum)) :]
+    start = min(first - TREND_MARGIN_POINTS, len(points) - MIN_TREND_POINTS)
+    return points[max(0, start) :]
 
 
 def weekly_trend(
@@ -217,7 +216,7 @@ def weekly_trend(
                 "recorded_exercise_days": summary["recorded_exercise_days"],
             }
         )
-    return _trim_leading_gap(result, _has_weekly_record, MIN_TREND_WEEKS)
+    return _trim_leading_gap(result, _has_weekly_record)
 
 
 def daily_html(

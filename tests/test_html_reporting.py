@@ -244,7 +244,10 @@ def test_daily_trend_preserves_missing_values_and_requires_three_weights(
 
     trend = daily_trend(db_path, date(2026, 7, 21), days=7)
 
-    assert len(trend) == 7
+    # 7日中、最初の記録（07-17）の1日前から。
+    assert [point["date"] for point in trend] == [
+        f"2026-07-{day:02d}" for day in range(16, 22)
+    ]
     assert trend[0]["calories"] is None
     assert trend[-1]["calories"] == 1400
     assert trend[-1]["calories_min"] == 1250
@@ -315,18 +318,18 @@ def test_daily_trend_drops_leading_days_without_records(db_path: Path) -> None:
 
     trend = daily_trend(db_path, date(2026, 7, 21), days=28)
 
+    # 最初の記録の1日前まで残し、記録が線の左端に張り付かないようにする。
     assert [point["date"] for point in trend] == [
         f"2026-07-{day:02d}" for day in range(15, 22)
     ]
 
 
-def test_daily_trend_keeps_seven_days_when_records_are_fewer(db_path: Path) -> None:
+def test_daily_trend_keeps_three_days_when_records_are_fewer(db_path: Path) -> None:
     _add_metric(db_path, "2026-07-21T07:00:00+09:00", 69.6)
 
     trend = daily_trend(db_path, date(2026, 7, 21), days=28)
 
-    assert len(trend) == 7
-    assert trend[0]["date"] == "2026-07-15"
+    assert [point["date"] for point in trend] == ["2026-07-19", "2026-07-20", "2026-07-21"]
 
 
 def test_daily_trend_keeps_full_window_when_records_span_it(db_path: Path) -> None:
@@ -355,7 +358,7 @@ def test_daily_trend_moving_average_uses_days_outside_the_visible_range(
 
     trend = daily_trend(db_path, date(2026, 7, 21), days=28)
 
-    assert trend[0]["date"] == "2026-07-15"
+    assert trend[0]["date"] == "2026-07-14"
     assert trend[-1]["weight_moving_average"] == 70.0
 
 
@@ -372,9 +375,9 @@ def test_weekly_trend_drops_leading_weeks_without_records(db_path: Path) -> None
 
     trend = weekly_trend(db_path, date(2026, 7, 21), weeks=12)
 
-    assert len(trend) == 4
+    assert len(trend) == 3
     assert trend[-1]["period_end"] == "2026-07-21"
-    assert trend[0]["period_end"] == "2026-06-30"
+    assert trend[0]["period_end"] == "2026-07-07"
 
 
 def test_weekly_trend_requires_four_meal_days_and_three_weight_measurements(
