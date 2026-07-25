@@ -145,30 +145,71 @@ def test_negative_sodium_rejected(db_path: Path) -> None:
         _ = add_meal(db_path, {"meal_type": "lunch", "sodium": -1})
 
 
+SCHEMA_V1_SQL = Path(__file__).parent / "data" / "schema_v1.sql"
+
+
 def _initialize_v1(path: Path) -> None:
-    """マイグレーション検証用に、sodium列を持たないv1スキーマを作る。"""
+    """本番DBが辿った経路を再現するため、first commit時点のv1スキーマを作る。"""
     with connect(path) as connection:
-        _ = connection.executescript(
-            "CREATE TABLE meals (id INTEGER PRIMARY KEY, eaten_at TEXT, protein REAL);"
-            + "CREATE TABLE meal_items (id INTEGER PRIMARY KEY, meal_id INTEGER, name TEXT);"
-            + "CREATE TABLE goals (id INTEGER PRIMARY KEY, started_at TEXT NOT NULL, "
-            + "target_date TEXT NOT NULL, start_weight REAL NOT NULL, target_weight REAL NOT NULL, "
-            + "target_type TEXT NOT NULL, status TEXT NOT NULL, note TEXT, "
-            + "created_at TEXT NOT NULL);"
-            + "CREATE TABLE plans (id INTEGER PRIMARY KEY, goal_id INTEGER NOT NULL, "
-            + "calculated_at TEXT NOT NULL, target_daily_calories INTEGER, "
-            + "target_calorie_range_min INTEGER, target_calorie_range_max INTEGER, "
-            + "target_weekly_exercise_minutes INTEGER, target_weekly_weight_change REAL NOT NULL, "
-            + "protein_target REAL, step_target INTEGER, assumptions TEXT NOT NULL, "
-            + "weekly_actions TEXT NOT NULL, safety_note TEXT, status TEXT NOT NULL);"
-            + "CREATE TABLE advice_history (id INTEGER PRIMARY KEY, generated_at TEXT NOT NULL, "
-            + "advice_type TEXT NOT NULL, period_start TEXT NOT NULL, period_end TEXT NOT NULL, "
-            + "summary TEXT NOT NULL, details TEXT NOT NULL, evidence TEXT NOT NULL, "
-            + "priority TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active');"
-            + "INSERT INTO meals (eaten_at, protein) VALUES ('2026-07-20T12:00:00+09:00', 10);"
+        _ = connection.executescript(SCHEMA_V1_SQL.read_text(encoding="utf-8"))
+        _ = connection.execute(
+            "INSERT INTO meals (eaten_at, meal_type, protein, created_at, updated_at) "
+            + "VALUES ('2026-07-20T12:00:00+09:00', 'lunch', 10, "
+            + "'2026-07-20T12:00:00+09:00', '2026-07-20T12:00:00+09:00')"
         )
-        _ = connection.execute("PRAGMA user_version = 1")
         connection.commit()
+
+
+def _table_schema(path: Path) -> dict[str, object]:
+    """列の定義（型・NOT NULL・既定値・主キー）と索引を、比較できる形で取り出す。"""
+    schema: dict[str, object] = {}
+    with connect(path) as connection:
+        names = [
+            cast(tuple[str], row)[0]
+            for row in cast(
+                list[tuple[object, ...]],
+                connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' "
+                    + "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+                ).fetchall(),
+            )
+        ]
+        for table in names:
+            schema[table] = {
+                cast(tuple[object, str, str, int, object, int], info)[1]: cast(
+                    tuple[object, str, str, int, object, int], info
+                )[2:]
+                for info in cast(
+                    list[tuple[object, ...]],
+                    connection.execute(f"PRAGMA table_info({table})").fetchall(),
+                )
+            }
+        schema["#indexes"] = {
+            cast(tuple[str, object], row)[0]: cast(tuple[str, object], row)[1]
+            for row in cast(
+                list[tuple[object, ...]],
+                connection.execute(
+                    "SELECT name, sql FROM sqlite_master WHERE type='index' ORDER BY name"
+                ).fetchall(),
+            )
+        }
+    return schema
+
+
+def test_migrated_schema_matches_fresh_schema(tmp_path: Path) -> None:
+    """SCHEMA_SQLとMIGRATIONSは別々に書かれた2つの正本で、同じ形に着地しないといけない。
+
+    片方だけ直すと「新規DBと移行済みDBでスキーマが違う」状態になり、本番DBだけで
+    再現する不具合を生む。列・型・NOT NULL・既定値・主キー・索引まで突き合わせる。
+    """
+    migrated = tmp_path / "migrated/data/diet.db"
+    fresh = tmp_path / "fresh/data/diet.db"
+    _initialize_v1(migrated)
+
+    _ = initialize(migrated)
+    _ = initialize(fresh)
+
+    assert _table_schema(migrated) == _table_schema(fresh)
 
 
 def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
@@ -208,6 +249,11 @@ def test_migration_drops_unused_protein_target(tmp_path: Path) -> None:
     _initialize_v1(path)
     with connect(path) as connection:
         with connection:
+            _ = connection.execute(
+                "INSERT INTO goals (id, started_at, target_date, start_weight, target_weight, "
+                + "target_type, status, created_at) VALUES (1, '2026-07-20', '2026-10-20', "
+                + "80, 74, 'weight_loss', 'active', '2026-07-20T09:00:00+09:00')"
+            )
             _ = connection.execute(
                 "INSERT INTO plans (goal_id, calculated_at, target_weekly_weight_change, "
                 + "protein_target, step_target, assumptions, weekly_actions, status) "

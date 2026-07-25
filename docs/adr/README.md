@@ -46,7 +46,7 @@
 
 | ADR | タイトル | ステータス |
 |---|---|---|
-| [0001](0001-migrations-in-code.md) | マイグレーションはコード内に持ち、`diet init`で適用する | 承認済み |
+| [0001](0001-migrations-in-code.md) | マイグレーションはコード内に持ち、`diet init`で適用する | 承認済み（一部を0012が置換） |
 | [0002](0002-profile-schema-as-source-of-truth.md) | プロフィールの形式はJSON Schemaを正本にし、検証は自作する | 承認済み |
 | [0003](0003-cap-calorie-deficit.md) | 摂取目標へ適用する赤字を暫定維持カロリーの25%までに制限する | 承認済み |
 | [0004](0004-routine-as-ordered-steps.md) | ルーティーンは時刻でなく順序で持ち、照合はエージェントが行う | 承認済み |
@@ -57,3 +57,4 @@
 | [0009](0009-goal-deletion-is-logical.md) | 目標の削除は論理削除にし、planは残す | 承認済み |
 | [0010](0010-advice-history-keeps-latest-only.md) | 助言は種別・期間ごとに最新1件だけを保持する | 承認済み |
 | [0011](0011-agent-read-only-profile-fields.md) | プロフィールにはエージェントだけが読む項目を置き、読む手順とセットで足す | 承認済み |
+| [0012](0012-migrations-verified-by-test-not-mirrored-files.md) | マイグレーションの記録は`migrations/*.sql`をやめ、スキーマ一致テストで保証する | 承認済み |
