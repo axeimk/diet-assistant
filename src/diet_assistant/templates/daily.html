@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block masthead_note %}当日の記録と、対象日を含む直近28日の傾向{% endblock %}
+{% block masthead_note %}当日の記録と、対象日を含む直近{{ trend | length }}日の傾向{% endblock %}
 
 {% block content %}
 {% set totals = summary.totals %}
@@ -71,7 +71,7 @@
 
 <section class="sheet" aria-labelledby="trend-heading">
   <div class="sheet__head">
-    <h2 id="trend-heading"><span class="sheet__index">2</span>直近28日の推移</h2>
+    <h2 id="trend-heading"><span class="sheet__index">2</span>直近{{ trend | length }}日の推移</h2>
     <p class="sheet__aside">凡例をクリックすると系列を隠せます</p>
   </div>
 

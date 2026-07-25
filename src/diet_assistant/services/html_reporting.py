@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import statistics
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date, time, timedelta
 from functools import cache
 from importlib.resources import files
@@ -19,6 +19,11 @@ from .reporting import (
     nutrient_reference,
     period_summary,
 )
+
+# 記録が始まる前の空白でグラフが潰れないよう、記録の無い先頭を落として表示する。
+# ただし点が数個だけの折れ線は傾向に見えないので、最低限の幅は残す。
+MIN_TREND_DAYS = 7
+MIN_TREND_WEEKS = 4
 
 
 class DailyTrendPoint(TypedDict):
@@ -84,7 +89,31 @@ def daily_trend(
                 ),
             }
         )
-    return result
+    # 移動平均は範囲外の日も使うので、絞り込みは全期間を組み立てた後に行う。
+    return _trim_leading_gap(result, _has_daily_record, MIN_TREND_DAYS)
+
+
+def _has_daily_record(point: DailyTrendPoint) -> bool:
+    # target_caloriesは記録ではなく計画なので、記録の有無には数えない。
+    return any(
+        point[key] is not None for key in ("calories", "weight", "exercise_minutes")
+    )
+
+
+def _has_weekly_record(point: WeeklyTrendPoint) -> bool:
+    return any(
+        point[key] > 0
+        for key in ("recorded_meal_days", "weight_measurements", "recorded_exercise_days")
+    )
+
+
+def _trim_leading_gap[T](
+    points: list[T], has_record: Callable[[T], bool], minimum: int
+) -> list[T]:
+    first = next((index for index, point in enumerate(points) if has_record(point)), None)
+    if first is None:
+        return points
+    return points[min(first, max(0, len(points) - minimum)) :]
 
 
 def weekly_trend(
@@ -120,7 +149,7 @@ def weekly_trend(
                 "recorded_exercise_days": summary["recorded_exercise_days"],
             }
         )
-    return result
+    return _trim_leading_gap(result, _has_weekly_record, MIN_TREND_WEEKS)
 
 
 def daily_html(

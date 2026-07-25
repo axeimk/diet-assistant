@@ -72,6 +72,81 @@ def test_daily_trend_preserves_missing_values_and_requires_three_weights(
     assert trend[-1]["exercise_minutes"] is None
 
 
+def test_daily_trend_drops_leading_days_without_records(db_path: Path) -> None:
+    for day in (16, 17, 18, 19, 20, 21):
+        _ = add_meal(
+            db_path,
+            {
+                "eaten_at": f"2026-07-{day:02d}T12:00:00+09:00",
+                "meal_type": "lunch",
+                "estimated_calories": 1500,
+            },
+        )
+
+    trend = daily_trend(db_path, date(2026, 7, 21), days=28)
+
+    assert [point["date"] for point in trend] == [
+        f"2026-07-{day:02d}" for day in range(15, 22)
+    ]
+
+
+def test_daily_trend_keeps_seven_days_when_records_are_fewer(db_path: Path) -> None:
+    _add_metric(db_path, "2026-07-21T07:00:00+09:00", 69.6)
+
+    trend = daily_trend(db_path, date(2026, 7, 21), days=28)
+
+    assert len(trend) == 7
+    assert trend[0]["date"] == "2026-07-15"
+
+
+def test_daily_trend_keeps_full_window_when_records_span_it(db_path: Path) -> None:
+    for day in (24, 30):
+        _add_metric(db_path, f"2026-06-{day:02d}T07:00:00+09:00", 70.0)
+
+    trend = daily_trend(db_path, date(2026, 7, 21), days=28)
+
+    assert len(trend) == 28
+    assert trend[0]["date"] == "2026-06-24"
+
+
+def test_daily_trend_moving_average_uses_days_outside_the_visible_range(
+    db_path: Path,
+) -> None:
+    for day in (15, 17, 19):
+        _add_metric(db_path, f"2026-07-{day:02d}T07:00:00+09:00", 70.0)
+    _ = add_meal(
+        db_path,
+        {
+            "eaten_at": "2026-07-21T12:00:00+09:00",
+            "meal_type": "lunch",
+            "estimated_calories": 1500,
+        },
+    )
+
+    trend = daily_trend(db_path, date(2026, 7, 21), days=28)
+
+    assert trend[0]["date"] == "2026-07-15"
+    assert trend[-1]["weight_moving_average"] == 70.0
+
+
+def test_weekly_trend_drops_leading_weeks_without_records(db_path: Path) -> None:
+    for day in (15, 17, 19, 21):
+        _ = add_meal(
+            db_path,
+            {
+                "eaten_at": f"2026-07-{day:02d}T12:00:00+09:00",
+                "meal_type": "lunch",
+                "estimated_calories": 1500,
+            },
+        )
+
+    trend = weekly_trend(db_path, date(2026, 7, 21), weeks=12)
+
+    assert len(trend) == 4
+    assert trend[-1]["period_end"] == "2026-07-21"
+    assert trend[0]["period_end"] == "2026-06-30"
+
+
 def test_weekly_trend_requires_four_meal_days_and_three_weight_measurements(
     db_path: Path,
 ) -> None:

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block masthead_note %}対象週の振り返りと、直近12週間の中期傾向{% endblock %}
+{% block masthead_note %}対象週の振り返りと、直近{{ trend | length }}週間の中期傾向{% endblock %}
 
 {% block content %}
 {% set changes = summary.changes %}
@@ -70,7 +70,7 @@
 
 <section class="sheet" aria-labelledby="trend-heading">
   <div class="sheet__head">
-    <h2 id="trend-heading"><span class="sheet__index">2</span>直近12週間の推移</h2>
+    <h2 id="trend-heading"><span class="sheet__index">2</span>直近{{ trend | length }}週間の推移</h2>
     <p class="sheet__aside">カロリーは4日以上、体重は3回以上<br>記録がある週だけ描画します</p>
   </div>
 
