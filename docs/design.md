@@ -31,6 +31,7 @@ CLI / Codex / iPhone inbox JSON
 ## DBスキーマ
 
 スキーマの正本は`db.py`の`SCHEMA_SQL`、バージョンは`PRAGMA user_version`で管理する。既存DBの変更は`db.py`の`MIGRATIONS`に版番号付きで追加し、`diet init`が未適用分だけを順に適用する。`migrations/*.sql`は履歴の記録で、実行はしない。
+全カラム、制約、インデックスは[データベーステーブル一覧](database.md)に記載する。
 
 | テーブル | 役割 | 主な関係・制約 |
 |---|---|---|
