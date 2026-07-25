@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 9
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -137,6 +137,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS advice_history_key
     7: """
 ALTER TABLE plans DROP COLUMN protein_target;
 """,
+    # 栄養素の目安（JSON）と、維持カロリーの前提にした体重をplanへ残す。
+    # 目安は読み出すコード（reporting・analysis）と同時に追加している。
+    8: """
+ALTER TABLE plans ADD COLUMN nutrient_targets TEXT;
+ALTER TABLE plans ADD COLUMN basis_weight REAL CHECK(basis_weight > 0);
+""",
+    # 助言の書き手を区別する。旧実装がCLIで生成した定型文は履歴として残すが、
+    # レポートには埋め込まない（ADR 0013）。
+    9: """
+ALTER TABLE advice_history ADD COLUMN written_by TEXT NOT NULL DEFAULT 'agent'
+    CHECK(written_by IN ('cli','agent'));
+UPDATE advice_history SET written_by = 'cli';
+""",
 }
 
 
@@ -168,6 +181,8 @@ CREATE TABLE IF NOT EXISTS plans (
     target_calorie_range_max INTEGER,
     estimated_maintenance_calories INTEGER,
     planned_daily_deficit INTEGER,
+    nutrient_targets TEXT,
+    basis_weight REAL CHECK(basis_weight > 0),
     target_weekly_exercise_minutes INTEGER,
     target_weekly_weight_change REAL NOT NULL,
     step_target INTEGER,
@@ -278,7 +293,9 @@ CREATE TABLE IF NOT EXISTS advice_history (
     summary TEXT NOT NULL,
     details TEXT NOT NULL,
     evidence TEXT NOT NULL,
-    priority TEXT NOT NULL
+    priority TEXT NOT NULL,
+    -- 文面の書き手。CLIが生成した過去の定型文（cli）はレポートへ埋め込まない。
+    written_by TEXT NOT NULL DEFAULT 'agent' CHECK(written_by IN ('cli','agent'))
 );
 -- 助言は種別・期間（食後助言は対象の食事）ごとに最新の1件だけを保持する。
 CREATE UNIQUE INDEX IF NOT EXISTS advice_history_key

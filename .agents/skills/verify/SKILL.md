@@ -98,17 +98,37 @@ diet --root "$DIET_VERIFY_ROOT" goal recalculate 1
 期待: 期限までの日数・週あたり必要変化・安全性の目安が返る。`recalculate` 後に
 古い計画が消えず `superseded` として残ること。
 
-### レポートと助言（services/reporting.py, advice.py）
+### レポートと分析（services/reporting.py, analysis.py, nutrition.py）
 
 ```bash
 diet --root "$DIET_VERIFY_ROOT" report daily --date 2026-07-21 --format json
 diet --root "$DIET_VERIFY_ROOT" report weekly --date 2026-07-21 --format json
 diet --root "$DIET_VERIFY_ROOT" advice today --date 2026-07-21
+diet --root "$DIET_VERIFY_ROOT" advice weekly --date 2026-07-21
 ```
 
 期待: 上で登録した食事・運動が `daily` の `meals` / `exercises` に現れ、`totals` に反映される。
-範囲が不明な食事は `uncertain_meal_ids` に入る。Markdown 形式（`--format` 省略時）では
-`$DIET_VERIFY_ROOT/reports/daily/` にファイルが生成されることも確認する。
+範囲が不明な食事は `uncertain_meal_ids` に入る。`nutrients` には記録した栄養素だけが入り、
+未記録の栄養素はキーを作らない（ゼロとして不足扱いにしない）。
+`advice` は `findings` を返し、文面（`situation`・`priority_action`）を返さない。
+Markdown 形式（`--format` 省略時）では `$DIET_VERIFY_ROOT/reports/daily/` に
+ファイルが生成され、栄養素の行が「52.0 g（目安 53.6〜82.5 g / −1.6）」の形になることも確認する。
+
+### 助言の保存とレポートへの反映（services/advice.py）
+
+```bash
+cat > "$DIET_VERIFY_ROOT/advice.json" <<'JSON'
+{"situation":"検証用の状況","priority_action":"検証用の行動","keep":"記録が続いている",
+ "alternative":"代替案","plan_change":"変更なし"}
+JSON
+diet --root "$DIET_VERIFY_ROOT" advice save --json "$DIET_VERIFY_ROOT/advice.json" \
+  --kind period --days 7 --date 2026-07-21
+diet --root "$DIET_VERIFY_ROOT" report weekly --date 2026-07-21
+```
+
+期待: `advice save` の戻り値の `evidence` にfindingsが入る（渡していないのにCLIが計算する）。
+生成された週次Markdownに「検証用の行動」が埋め込まれ、「助言は未記載」が消えること。
+保存前のレポートには「助言は未記載」と「## 分析結果」が出ること。
 
 ### inbox 取り込み（services/intake.py）
 

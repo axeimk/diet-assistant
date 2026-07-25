@@ -1,49 +1,89 @@
 ---
 name: write-report
-description: diet-assistantの記録から日次・週次レポートをMarkdownの定型体裁で作成して提示する手順。ユーザーが「今日のレポート書いて」「昨日のレポート出して」「週次レポート」「今週のまとめ」「最近どう？」など、特定の日や週の記録の要約・振り返り・レポートを求めたときは、言い回しがカジュアルでも必ずこのスキルを使う。dietコマンドの出力を自己流に整形せず、まずこの手順に従う。
+description: diet-assistantの記録から日次・週次レポートを作成して提示する手順。分析結果（findings）を取得し、助言を自分の言葉で書いて保存し、レポートを生成する。ユーザーが「今日のレポート書いて」「昨日のレポート出して」「週次レポート」「今週のまとめ」「最近どう？」など、特定の日や週の記録の要約・振り返り・レポートを求めたときは、言い回しがカジュアルでも必ずこのスキルを使う。dietコマンドの出力を自己流に整形せず、まずこの手順に従う。
 ---
 
-# write-report — 日次・週次レポートを定型体裁で出す
+# write-report — 分析結果から助言を書き、レポートを出す
 
-`diet report` の生成するMarkdownを正とし、7日傾向の補足を添えて提示する。
-レポート本文を自分で作文しない（数値の正本はSQLiteで、その集計はCLIが行う）。
+数値の正本はSQLiteで、その集計と分析（findings）はCLIが行う。**助言の文面だけは自分が書く**
+（ADR 0013）。集計値を自分で計算し直さない。findingsに無い数値を助言に書かない。
 
 ## 手順
 
 1. 対象日を依頼から読み取る。明示された日付はその日を使う。「今日」または省略時は
    `--date` を付けず、CLIにプロフィールの `day_start_time` を使ったレポート日を決めさせる。
    たとえば開始時刻が04:00なら、7月23日00:08の記録は7月22日分になる。
-2. レポートを生成する。`--root` は付けない（本番データの読み取りとレポート保存が目的のため）。
+2. 分析結果を取得する。`--root` は付けない（本番データを読む）。
    日付が明示された場合だけ `--date <YYYY-MM-DD>` を加える:
 
    ```bash
+   diet advice today     # 日次。findings と保存済み助言が返る
+   diet advice weekly    # 週次（直近7日）
+   ```
+
+3. `findings` から助言を書く。書き方は下の「助言の書き方」に従う。
+   `findings` が空、または `meal_records_missing` が先頭なら、助言ではなく
+   記録の欠けを事実として伝える。
+4. 書いた助言を保存する。JSONファイルに書いてから渡す:
+
+   ```bash
+   diet advice save --json /tmp/advice.json                          # 日次
+   diet advice save --json /tmp/advice.json --kind period --days 7   # 週次
+   ```
+
+   使える項目は `situation`・`priority_action`（必須）と
+   `keep`・`alternative`・`plan_change`・`next_review_date`・`note`。
+   それ以外のキーはエラーになる。`evidence` は渡さない（CLIがfindingsを付ける）。
+5. レポートを生成する。保存した助言が埋め込まれる:
+
+   ```bash
    diet report daily --format markdown
+   diet report weekly --format markdown
    ```
 
    戻り値のJSONの `path`（`reports/daily/<日付>.md`）を読む。
    注意: `--stdout` を付けてもMarkdownは `{"markdown": "..."}` のJSONに包まれて返るので、
    ファイルを読むほうが確実。
-3. 傾向データを取得する:
+6. 週次では前週比の補足に `diet report weekly --format json` の
+   `changes`・`target_weekly_weight_change`・`pace_difference` を使う。
+7. 「出力体裁」に従って回答を組み立てる。`reports/` のファイルはこの手順で生成したものが
+   正本なので、あとから書き換えない。
 
-   ```bash
-   diet report weekly --format json
-   ```
+## 助言の書き方
 
-   使う値: `average_calories`・`average_weight`・`exercise_minutes`・`recorded_meal_days`・
-   `changes`（前週比）・`target_weekly_weight_change`・`pace_difference`。
-4. 「出力体裁」に従って回答を組み立てる。補足はチャット回答にだけ付け、
-   `reports/` のファイルはCLI生成のまま書き換えない（ファイルはCLI出力の正本のため）。
+findings は優先順位の高い順に並んでいる。**先頭のfindingを最優先行動にする**。
+順序はCLIが決めており、カロリー管理が栄養素より先に来る（ADR 0014）。並べ替えない。
 
-週次レポートを求められた場合は、手順2を `diet report weekly --format markdown` に替える
-（`reports/weekly/` に保存される）。日付が明示された場合だけ同様に `--date` を加える。
-手順3以降は同じで、`changes` を前週比の補足に使う。
+- `situation`: 先頭のfindingの数値をそのまま使って状況を1文で書く。
+  例: 夕食が平均672 kcalで1日の43%を占めている。
+- `priority_action`: 行動はひとつだけ。`resolution` に従う:
+  - `reduce` — 減らす・配分を変える
+  - `substitute` — **置き換える**。追加で食べる助言にしない
+  - `increase` — 増やしてよい（カロリーに余裕があるときだけこの値になる）
+  - `record` — まず記録する。助言より記録の欠けを先に伝える
+  - `none` — 参考情報。行動を作らない
+- `alternative`（週次）: 2番目以降のfindingから、続けやすい代替案をひとつ。
+- `keep`（週次）: 続いていること（記録日数、範囲内の項目）を事実として書く。
+- `plan_change`: `plan_basis_weight_stale` があれば `diet goal recalculate` を促す。
+  それ以外は原則「変更なし」。
+
+守ること:
+
+- **findingsに無い数値を書かない。** 品目名や頻度を推測で書かない
+  （「最も頻度の高い間食」のような、測っていない主張をしない）。
+- **カロリーが超過しているときに追加摂取を勧めない。** `calorie_headroom` が0以下なら
+  不足の解消は置き換えだけ。栄養素を満たすために食べ足す助言は書かない。
+- 単日の値で断定せず、`sample_days` が小さいfindingは「まだ判断材料が少ない」と添える。
+- 文面は `config/profile.json` の `advice_preference`（自由記述の助言方針。
+  例: 「まずは継続可能な変更を優先」）に沿わせる。未設定なら平坦に書く。
+- 医療的な判断をしない。体調や疾病に関わる話は専門家への相談を促すにとどめる。
 
 ## 出力体裁
 
 回答はこの形で返す。前置きの説明文は付けない:
 
 ```markdown
-（CLIが生成した日次レポートMarkdownをそのまま貼る）
+（CLIが生成したレポートMarkdownをそのまま貼る）
 
 ## 7日間の傾向
 - 平均摂取カロリー: 1,850 kcal/日（前週比 +120）
@@ -52,14 +92,8 @@ description: diet-assistantの記録から日次・週次レポートをMarkdown
 ```
 
 - 値が `null` の項目は「記録なし」と書く。数値をでっち上げない。
-- 傾向への一言コメントは、`pace_difference` が目標から大きく外れているなど
-  言う価値がある場合だけ1〜2文で添える。毎回の感想は書かない。
 - 記録の少ない週（`recorded_meal_days` が小さい）は、傾向の解釈より先に
   記録の欠けを事実として示す。
-- 自分の言葉で添えるコメントは、`config/profile.json` の `advice_preference`
-  （自由記述の助言方針。例: 「まずは継続可能な変更を優先」）に沿わせる。未設定なら何もしない。
-  方針を反映するのはチャットに添える文章だけで、CLIが生成したレポートMarkdownと
-  `advice` の文言は書き換えない（CLI出力が正本のため）。
 
 ## 注意点
 
@@ -70,6 +104,8 @@ description: diet-assistantの記録から日次・週次レポートをMarkdown
   抜けていても確認しない。
 - 記録の追加・修正はこのスキルの範囲外。レポート中に明らかな記録漏れを見つけても
   黙って直さず、事実として指摘するにとどめる。
+- 同じ日・同じ期間の助言は上書きされる（種別・期間ごとに最新1件だけ保持。ADR 0010）。
+  書き直したら `diet advice save` をもう一度実行し、レポートを再生成する。
 - `--date` のタイムゾーンは記録の `eaten_at` とローカル時刻に依存する。
   `config/profile.json` の `day_start_time` より前の記録は前日のレポートへ入る。
   「今日の食事が出ない」ように見えたら、暦日だけでなくこの境界も確認する。

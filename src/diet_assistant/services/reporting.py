@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import statistics
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, time, timedelta
 from pathlib import Path
-from typing import NotRequired, TypedDict, cast
+from typing import Literal, NotRequired, TypedDict, cast
 
 from ..db import connect
 from ..util import day_bounds, require_str
+from .finding import Finding
+from .nutrition import NutrientComparison, NutrientTarget, compare_nutrients
+
+NutrientKey = Literal["protein", "fat", "carbohydrates", "fiber", "sodium"]
+NUTRIENT_KEYS: tuple[NutrientKey, ...] = ("protein", "fat", "carbohydrates", "fiber", "sodium")
 
 
 class MealRecord(TypedDict):
@@ -55,6 +61,9 @@ class DailySummary(TypedDict):
     totals: Totals
     target_daily_calories: float | None
     difference_from_target: float | None
+    nutrient_targets: dict[str, NutrientTarget]
+    nutrients: dict[str, NutrientComparison]
+    recorded_nutrients: list[NutrientKey]
     uncertain_meal_ids: list[int]
 
 
@@ -124,26 +133,54 @@ def daily_summary(path: Path, day: date, *, day_start: time = time.min) -> Daily
     target_value = plan_record.get("target_daily_calories")
     target = float(target_value) if isinstance(target_value, (int, float)) else None
     metric_record = cast(MetricRecord, cast(object, dict(metric))) if metric else None
+    nutrient_target_map = plan_nutrient_targets(plan_record)
+    # 未記録の栄養素はゼロではなく欠損として扱い、目安との比較対象から外す（ADR 0007）。
+    recorded: list[NutrientKey] = [
+        name for name in NUTRIENT_KEYS if any(row[name] is not None for row in meals)
+    ]
+    totals: Totals = {
+        "estimated_calories": calories,
+        "calories_min": numeric_total(row["calories_min"] for row in meals),
+        "calories_max": numeric_total(row["calories_max"] for row in meals),
+        "protein": numeric_total(row["protein"] for row in meals),
+        "fat": numeric_total(row["fat"] for row in meals),
+        "carbohydrates": numeric_total(row["carbohydrates"] for row in meals),
+        "fiber": numeric_total(row["fiber"] for row in meals),
+        "sodium": numeric_total(row["sodium"] for row in meals),
+        "exercise_minutes": round(sum(row["duration_minutes"] or 0 for row in exercises), 1),
+    }
     return {
         "date": day.isoformat(),
         "meals": meals,
         "exercises": exercises,
         "metric": metric_record,
-        "totals": {
-            "estimated_calories": calories,
-            "calories_min": numeric_total(row["calories_min"] for row in meals),
-            "calories_max": numeric_total(row["calories_max"] for row in meals),
-            "protein": numeric_total(row["protein"] for row in meals),
-            "fat": numeric_total(row["fat"] for row in meals),
-            "carbohydrates": numeric_total(row["carbohydrates"] for row in meals),
-            "fiber": numeric_total(row["fiber"] for row in meals),
-            "sodium": numeric_total(row["sodium"] for row in meals),
-            "exercise_minutes": round(sum(row["duration_minutes"] or 0 for row in exercises), 1),
-        },
+        "totals": totals,
         "target_daily_calories": target,
         "difference_from_target": round(calories - target, 1) if target and meals else None,
+        "nutrient_targets": nutrient_target_map,
+        "nutrients": compare_nutrients(_recorded_totals(totals, recorded), nutrient_target_map),
+        "recorded_nutrients": recorded,
         "uncertain_meal_ids": [m["id"] for m in meals if m["estimation_confidence"] == "low"],
     }
+
+
+def _recorded_totals(totals: Totals, recorded: Sequence[str]) -> dict[str, float]:
+    values: dict[str, float] = {
+        "protein": totals["protein"],
+        "fat": totals["fat"],
+        "carbohydrates": totals["carbohydrates"],
+        "fiber": totals["fiber"],
+        "sodium": totals["sodium"],
+    }
+    return {name: value for name, value in values.items() if name in recorded}
+
+
+def plan_nutrient_targets(plan_record: Mapping[str, object]) -> dict[str, NutrientTarget]:
+    raw = plan_record.get("nutrient_targets")
+    if not isinstance(raw, str):
+        return {}
+    parsed = cast(object, json.loads(raw))
+    return cast(dict[str, NutrientTarget], parsed) if isinstance(parsed, dict) else {}
 
 
 def period_summary(
@@ -207,9 +244,112 @@ def _difference(current: float | None, previous: float | None) -> float | None:
     return round(current - previous, 2) if current is not None and previous is not None else None
 
 
+NUTRIENT_LABELS: dict[str, NutrientKey] = {
+    "たんぱく質": "protein",
+    "脂質": "fat",
+    "炭水化物": "carbohydrates",
+    "食物繊維": "fiber",
+    "食塩相当量": "sodium",
+}
+
+
+def nutrient_reference(comparison: NutrientComparison) -> str:
+    """「目安 7.5 g未満 / +3.4」のような、目安と差の表示。MarkdownとHTMLで共用する。"""
+    return f"目安 {_range_text(comparison)} / {_signed(comparison['difference'])}"
+
+
+def _nutrient_line(label: str, name: NutrientKey, summary: DailySummary) -> str:
+    if name not in summary["recorded_nutrients"]:
+        return f"- {label}: 記録なし"
+    actual = summary["totals"][name]
+    comparison = summary["nutrients"].get(name)
+    if comparison is None:
+        return f"- {label}: {actual} g（目安未設定）"
+    return f"- {label}: {actual} {comparison['unit']}（{nutrient_reference(comparison)}）"
+
+
+def _range_text(comparison: NutrientComparison) -> str:
+    minimum = comparison["minimum"]
+    maximum = comparison["maximum"]
+    unit = comparison["unit"]
+    if minimum is not None and maximum is not None:
+        return f"{_amount(minimum)}〜{_amount(maximum)} {unit}"
+    if minimum is not None:
+        return f"{_amount(minimum)} {unit}以上"
+    return f"{_amount(maximum or 0)} {unit}未満"
+
+
+def _amount(value: float) -> str:
+    return str(int(value)) if value == int(value) else str(value)
+
+
+_WRITE_HINT = "の分析結果から書いて `diet advice save` で保存する）"
+_UNWRITTEN_DAILY = "（助言は未記載。`diet advice today` " + _WRITE_HINT
+_UNWRITTEN_WEEKLY = "- （助言は未記載。`diet advice weekly` " + _WRITE_HINT
+
+FINDING_LABELS = {
+    "meal_records_missing": "食事記録のある日数",
+    "calorie_average_recorded": "平均摂取カロリー",
+    "calorie_average_above_target": "平均摂取カロリー（目標上限超過）",
+    "calorie_average_below_target": "平均摂取カロリー（目標下限未満）",
+    "calorie_average_within_target": "平均摂取カロリー（目標範囲内）",
+    "meal_type_calorie_skew": "食事種別の偏り",
+    "plan_basis_weight_stale": "計画の前提体重",
+    "goal_pace_behind": "体重の変化ペース（目標より遅い）",
+    "goal_pace_on_track": "体重の変化ペース（目標どおり）",
+}
+_NUTRIENT_STATUS_SUFFIX = {
+    "_below_target": "不足",
+    "_above_target": "超過",
+    "_within_target": "範囲内",
+}
+
+
+def findings_markdown(findings: Sequence[Finding]) -> list[str]:
+    """findingsを数値の箇条書きにする。助言の文面ではなく事実だけを並べる。"""
+    return [_finding_line(finding) for finding in findings] or ["- 判断できる記録がありません"]
+
+
+def _finding_line(finding: Finding) -> str:
+    mark = "指摘" if finding["severity"] == "attention" else "参考"
+    unit = finding["unit"]
+    notes: list[str] = []
+    reference = finding["reference"]
+    if reference is not None:
+        difference = round(finding["actual"] - reference, 2)
+        notes.append(f"目安 {_amount(reference)} {unit} / {_signed(difference)}")
+    meal_type = finding["detail"].get("meal_type")
+    share = finding["detail"].get("share")
+    if isinstance(meal_type, str) and isinstance(share, (int, float)):
+        notes.append(f"{meal_type} が{round(float(share) * 100)}%")
+    notes.append(f"{finding['sample_days']}日分")
+    return (
+        f"- [{mark}] {_finding_label(finding)}: "
+        + f"{_amount(finding['actual'])} {unit}（{'、'.join(notes)}）"
+    )
+
+
+def _finding_label(finding: Finding) -> str:
+    kind = finding["kind"]
+    label = FINDING_LABELS.get(kind)
+    if label is not None:
+        return label
+    for suffix, status in _NUTRIENT_STATUS_SUFFIX.items():
+        if kind.endswith(suffix):
+            nutrient = finding["detail"].get("label")
+            name = nutrient if isinstance(nutrient, str) else kind[: -len(suffix)]
+            return f"{name} {status}"
+    return kind
+
+
+def _signed(value: float) -> str:
+    return "±0" if value == 0 else f"{'+' if value > 0 else '−'}{_amount(abs(value))}"
+
+
 def daily_markdown(
     summary: DailySummary,
     advice: dict[str, object] | None = None,
+    findings: Sequence[Finding] | None = None,
     goal_evaluation: dict[str, object] | None = None,
 ) -> str:
     totals = summary["totals"]
@@ -232,12 +372,10 @@ def daily_markdown(
         + f"({m['estimated_calories'] if m['estimated_calories'] is not None else '?'} kcal)"
         for m in summary["meals"]
     ] or ["- 記録なし"]
-    advice_text = (
-        require_str(advice, "situation")
-        + " "
-        + require_str(advice, "priority_action")
+    advice_lines = (
+        [require_str(advice, "situation") + " " + require_str(advice, "priority_action")]
         if advice
-        else "通常どおり記録を続け、単日の値ではなく7日以上の傾向で判断しましょう。"
+        else [_UNWRITTEN_DAILY]
     )
     outcome_labels = {
         "insufficient_data": "データ不足",
@@ -265,15 +403,15 @@ def daily_markdown(
         calorie_lines = [
             f"- 摂取カロリー: {totals['estimated_calories']} kcal "
             + f"（範囲 {totals['calories_min']}〜{totals['calories_max']} kcal）",
-            f"- P/F/C/食物繊維: {totals['protein']}/{totals['fat']}/"
-            + f"{totals['carbohydrates']}/{totals['fiber']} g",
-            f"- 食塩相当量: {totals['sodium']} g",
+            *(
+                _nutrient_line(label, name, summary)
+                for label, name in NUTRIENT_LABELS.items()
+            ),
         ]
     else:
         calorie_lines = [
             "- 摂取カロリー: 記録なし",
-            "- P/F/C/食物繊維: 記録なし",
-            "- 食塩相当量: 記録なし",
+            *(f"- {label}: 記録なし" for label in NUTRIENT_LABELS),
         ]
     exercise_text = (
         f"{totals['exercise_minutes']}分" if summary["exercises"] else "記録なし"
@@ -292,7 +430,10 @@ def daily_markdown(
             f"- 目標との差: {difference_text}",
             "",
             "## 短い助言",
-            advice_text,
+            *advice_lines,
+            "",
+            "## 分析結果",
+            *findings_markdown(findings or []),
             *evaluation_lines,
             "",
             "## 不確実性の高い記録",
@@ -302,7 +443,19 @@ def daily_markdown(
     )
 
 
-def weekly_markdown(summary: PeriodSummary, advice: dict[str, object]) -> str:
+def _advice_item(advice: dict[str, object] | None, key: str) -> str:
+    """保存済み助言の項目。未記載なら捏造せず、未記載と書く。"""
+    if advice is None:
+        return _UNWRITTEN_WEEKLY
+    value = advice.get(key)
+    return f"- {value}" if isinstance(value, str) and value else "- （未記載）"
+
+
+def weekly_markdown(
+    summary: PeriodSummary,
+    advice: dict[str, object] | None = None,
+    findings: Sequence[Finding] | None = None,
+) -> str:
     changes = summary.get("changes")
     if changes is None:
         raise ValueError("週次集計にchangesがありません")
@@ -335,20 +488,23 @@ def weekly_markdown(summary: PeriodSummary, advice: dict[str, object]) -> str:
             f"- 目標ペース: {summary.get('target_weekly_weight_change')} kg/週",
             f"- 実績と目標ペースの差: {summary.get('pace_difference')} kg/週",
             "",
+            "## 分析結果",
+            *findings_markdown(findings or []),
+            "",
             "## よかった点",
-            f"- {require_str(advice, 'keep')}",
+            _advice_item(advice, "keep"),
             "",
             "## 調整したほうがよい点",
-            f"- {require_str(advice, 'situation')}",
+            _advice_item(advice, "situation"),
             "",
             "## 来週の最優先行動",
-            f"- {require_str(advice, 'priority_action')}",
+            _advice_item(advice, "priority_action"),
             "",
             "## 代替案",
-            f"- {require_str(advice, 'alternative')}",
+            _advice_item(advice, "alternative"),
             "",
             "## 計画変更",
-            f"- {require_str(advice, 'plan_change')}",
+            _advice_item(advice, "plan_change"),
             "",
             "## データ不足",
             f"- {', '.join(missing) if missing else 'なし'}",

@@ -6,8 +6,9 @@ import sqlite3
 import sys
 import uuid
 import webbrowser
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from typing import cast
 
 from .config import load_profile, profile_day_start_time, validate_profile
 from .db import SCHEMA_VERSION, initialize, schema_version
@@ -24,7 +25,8 @@ from .repository import (
     soft_delete_goal,
     update,
 )
-from .services.advice import generate_advice, generate_daily_advice, generate_meal_advice
+from .services.advice import Kind, latest_advice, meal_day_context, save_advice
+from .services.analysis import findings
 from .services.html_reporting import daily_html, daily_trend, weekly_html, weekly_trend
 from .services.intake import import_directory, process_entry
 from .services.maintenance import cleanup_candidates, cleanup_photos, create_backup
@@ -90,6 +92,8 @@ class CliArgs(argparse.Namespace):
     no_open: bool = False
     days: int | None = None
     apply: bool = False
+    kind: str = "daily"
+    meal_id: int | None = None
 
 
 def paths(args: CliArgs) -> dict[str, Path]:
@@ -238,6 +242,15 @@ def build_parser() -> argparse.ArgumentParser:
     for action in ("today", "weekly"):
         p = advice.add_parser(action)
         _ = p.add_argument("--date")
+        _ = p.add_argument("--days", type=int, default=7)
+    advice_save = advice.add_parser("save")
+    _ = advice_save.add_argument("--json", type=Path, required=True)
+    _ = advice_save.add_argument("--date")
+    _ = advice_save.add_argument(
+        "--kind", choices=["daily", "period", "after_meal"], default="daily"
+    )
+    _ = advice_save.add_argument("--days", type=int, default=7)
+    _ = advice_save.add_argument("--meal-id", type=int)
     backup = commands.add_parser("backup").add_subparsers(dest="action", required=True)
     _ = backup.add_parser("create")
     _ = backup.add_parser("list")
@@ -309,14 +322,7 @@ def run(args: CliArgs) -> object:
     if command == "report":
         return _report(args, p)
     if command == "advice":
-        profile = load_profile(p["profile"])
-        day_start = profile_day_start_time(profile)
-        day = _report_date(args.date, day_start)
-        return (
-            generate_daily_advice(p["db"], day, day_start=day_start)
-            if action == "today"
-            else generate_advice(p["db"], day, 7, day_start=day_start)
-        )
+        return _advice(args, p)
     if command == "backup":
         if action == "create":
             return {"path": str(create_backup(p["db"], p["backup"]))}
@@ -449,7 +455,7 @@ def _meal(args: CliArgs, db: Path, profile: dict[str, object]) -> object:
             payload=intake_payload,
             result_id=require_int(meal, "id"),
         )
-        meal["advice_after_meal"] = generate_meal_advice(db, meal, profile)
+        meal["day_context"] = meal_day_context(db, meal, profile)
         return meal
     if args.action == "list":
         return list_rows(db, "meals", order_by="eaten_at DESC", limit=args.limit)
@@ -558,37 +564,46 @@ def _report(args: CliArgs, p: dict[str, Path]) -> object:
     day = _report_date(args.date, day_start)
     if args.action == "daily":
         summary = daily_summary(p["db"], day, day_start=day_start)
-        advice = generate_daily_advice(p["db"], day, day_start=day_start)
+        result_findings = findings(p["db"], day, 1, profile=profile, day_start=day_start)
+        advice = latest_advice(p["db"], kind="daily", day=day)
         goal_evaluation = evaluate_active_goal(
             p["db"], evaluation_date=day, day_start=day_start
         )
         if args.format == "json":
-            return {**summary, "advice": advice, "goal_evaluation": goal_evaluation}
+            return {
+                **summary,
+                "findings": result_findings,
+                "advice": advice,
+                "goal_evaluation": goal_evaluation,
+            }
         if args.format == "html":
             content = daily_html(
                 summary,
                 advice,
+                result_findings,
                 goal_evaluation,
                 daily_trend(p["db"], day, day_start=day_start),
             )
             output = p["daily"] / f"{day}.html"
         else:
-            content = daily_markdown(summary, advice, goal_evaluation)
+            content = daily_markdown(summary, advice, result_findings, goal_evaluation)
             output = p["daily"] / f"{day}.md"
     else:
         summary = weekly_summary(p["db"], day, day_start=day_start)
-        advice = generate_advice(p["db"], day, 7, day_start=day_start)
+        result_findings = findings(p["db"], day, 7, profile=profile, day_start=day_start)
+        advice = latest_advice(p["db"], kind="period", day=day, days=7)
         if args.format == "json":
-            return {"summary": summary, "advice": advice}
+            return {"summary": summary, "findings": result_findings, "advice": advice}
         if args.format == "html":
             content = weekly_html(
                 summary,
                 advice,
+                result_findings,
                 weekly_trend(p["db"], day, day_start=day_start),
             )
             output = p["weekly"] / f"{day}.html"
         else:
-            content = weekly_markdown(summary, advice)
+            content = weekly_markdown(summary, advice, result_findings)
             output = p["weekly"] / f"{day}.md"
     if args.stdout:
         return {args.format: content}
@@ -607,6 +622,34 @@ def _report(args: CliArgs, p: dict[str, Path]) -> object:
                 if not opened:
                     result["warning"] = "ブラウザを開けませんでした。pathのファイルを開いてください"
     return result
+
+
+def _advice(args: CliArgs, p: dict[str, Path]) -> object:
+    profile = load_profile(p["profile"])
+    day_start = profile_day_start_time(profile)
+    day = _report_date(args.date, day_start)
+    if args.action == "save":
+        if args.json is None:
+            raise ValueError("--json が必要です")
+        kind = cast(Kind, args.kind)
+        return save_advice(
+            p["db"],
+            read_json(args.json),
+            kind=kind,
+            day=day,
+            days=args.days or 7,
+            meal_id=args.meal_id,
+            profile=profile,
+        )
+    days = 1 if args.action == "today" else (args.days or 7)
+    kind: Kind = "daily" if args.action == "today" else "period"
+    return {
+        "period_start": (day - timedelta(days=days - 1)).isoformat(),
+        "period_end": day.isoformat(),
+        "days": days,
+        "findings": findings(p["db"], day, days, profile=profile, day_start=day_start),
+        "saved_advice": latest_advice(p["db"], kind=kind, day=day, days=days),
+    }
 
 
 def _report_date(value: str | None, day_start: time) -> date:

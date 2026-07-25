@@ -218,7 +218,7 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
 
     applied = migrate(path)
 
-    assert applied == [2, 3, 4, 5, 6, 7]
+    assert applied == [2, 3, 4, 5, 6, 7, 8, 9]
     assert schema_version(path) == SCHEMA_VERSION
     with connect(path) as connection:
         row = tuple(
@@ -274,6 +274,42 @@ def test_migration_drops_unused_protein_target(tmp_path: Path) -> None:
         )
     assert "protein_target" not in plan_columns
     assert tuple(row) == (8000, "active"), "既存の計画行は保持される"
+
+
+def test_migration_adds_nutrient_targets_and_basis_weight(tmp_path: Path) -> None:
+    """栄養素の目安と、維持カロリーの前提体重をplanに持たせる。"""
+    path = tmp_path / "data/diet.db"
+    _initialize_v1(path)
+
+    _ = migrate(path)
+
+    with connect(path) as connection:
+        plan_columns = {
+            cast(tuple[int, str], info)[1]
+            for info in cast(
+                list[tuple[object, ...]], connection.execute("PRAGMA table_info(plans)").fetchall()
+            )
+        }
+    assert {"nutrient_targets", "basis_weight"} <= plan_columns
+
+
+def test_migration_marks_existing_advice_as_cli_written(tmp_path: Path) -> None:
+    """旧実装がCLIで生成した助言は消さず、書き手を`cli`として残す（ADR 0013）。"""
+    path = tmp_path / "data/diet.db"
+    _initialize_v1(path)
+    _insert_v1_advice(path, "7day", "2026-07-20", "2026-07-20T21:00:00+09:00", "旧定型文", None)
+
+    _ = migrate(path)
+
+    with connect(path) as connection:
+        rows = [
+            tuple(row)
+            for row in cast(
+                list[sqlite3.Row],
+                connection.execute("SELECT summary, written_by FROM advice_history").fetchall(),
+            )
+        ]
+    assert rows == [("旧定型文", "cli")]
 
 
 def _insert_v1_advice(
@@ -337,7 +373,7 @@ def test_initialize_migrates_existing_db(tmp_path: Path) -> None:
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
 
-    assert initialize(path) == [2, 3, 4, 5, 6, 7]
+    assert initialize(path) == [2, 3, 4, 5, 6, 7, 8, 9]
     assert schema_version(path) == SCHEMA_VERSION
 
 
@@ -435,6 +471,108 @@ def test_energy_targets_from_profile_are_capped() -> None:
     assert energy["deficit_was_capped"] is True
     assert energy["calorie_plan_supports_theoretical_pace"] is False
     assert energy["projected_weight_at_target_date"] == 88.79
+
+
+_PROFILE: dict[str, object] = {
+    "height_cm": 175,
+    "birth_date": "1991-03-04",
+    "sex": "male",
+    "activity_level": "sedentary",
+}
+
+
+def _weight(db_path: Path, measured_at: str, weight: float) -> None:
+    _ = insert(
+        db_path,
+        "body_metrics",
+        {
+            "measured_at": measured_at,
+            "weight": weight,
+            "body_fat_percentage": None,
+            "waist": None,
+            "note": None,
+            "created_at": now_iso(),
+        },
+    )
+
+
+def test_plan_uses_latest_weight_not_start_weight(db_path: Path) -> None:
+    """維持カロリーは目標登録時の体重ではなく直近の実測体重から計算する。"""
+    goal_id = insert(
+        db_path,
+        "goals",
+        {
+            "started_at": "2026-07-21",
+            "target_date": "2026-10-13",
+            "start_weight": 91,
+            "target_weight": 85,
+            "target_type": "weight_loss",
+            "status": "inactive",
+            "note": None,
+            "created_at": now_iso(),
+        },
+    )
+    _weight(db_path, "2026-07-24T07:00:00+09:00", 88.5)
+    _weight(db_path, "2026-07-25T07:00:00+09:00", 88.1)
+
+    plan = save_plan(db_path, goal_id, profile=_PROFILE, today=date(2026, 7, 25))
+
+    energy = cast(dict[str, object], plan["energy"])
+    assert plan["basis_weight"] == 88.1
+    assert energy["estimated_maintenance_calories"] == 2166, "88.1kg基準（91kg基準なら2200）"
+    with connect(db_path) as connection:
+        row = cast(
+            sqlite3.Row,
+            connection.execute(
+                "SELECT basis_weight FROM plans WHERE id = ?", (plan["plan_id"],)
+            ).fetchone(),
+        )
+    assert row["basis_weight"] == 88.1, "前提体重をplanに残し、古さを判定できるようにする"
+
+
+def test_plan_falls_back_to_start_weight_without_measurements(db_path: Path) -> None:
+    goal_id = _goal(db_path)
+
+    plan = save_plan(db_path, goal_id, profile=_PROFILE, today=date(2026, 7, 21))
+
+    assert plan["basis_weight"] == 80
+
+
+def test_plan_stores_nutrient_targets(db_path: Path) -> None:
+    """目標カロリーと同じ経路で、栄養素の目安もplanに保存する。"""
+    goal_id = _goal(db_path)
+
+    plan = save_plan(db_path, goal_id, profile=_PROFILE, today=date(2026, 7, 21))
+
+    with connect(db_path) as connection:
+        row = cast(
+            sqlite3.Row,
+            connection.execute(
+                "SELECT nutrient_targets FROM plans WHERE id = ?", (plan["plan_id"],)
+            ).fetchone(),
+        )
+    stored = cast(dict[str, object], json.loads(cast(str, row["nutrient_targets"])))
+    assert sorted(stored) == ["carbohydrates", "fat", "fiber", "protein", "sodium"]
+    protein = cast(dict[str, object], stored["protein"])
+    energy = cast(dict[str, object], plan["energy"])
+    target = cast(float, energy["target_daily_calories"])
+    assert protein["minimum"] == pytest.approx(target * 0.13 / 4, abs=0.1)
+    assert "13〜20%E" in cast(str, protein["basis"])
+
+
+def test_plan_without_profile_stores_no_nutrient_targets(db_path: Path) -> None:
+    goal_id = _goal(db_path)
+
+    plan = save_plan(db_path, goal_id, today=date(2026, 7, 21))
+
+    with connect(db_path) as connection:
+        row = cast(
+            sqlite3.Row,
+            connection.execute(
+                "SELECT nutrient_targets FROM plans WHERE id = ?", (plan["plan_id"],)
+            ).fetchone(),
+        )
+    assert row["nutrient_targets"] is None
 
 
 def test_goal_evaluation_uses_seven_day_average(db_path: Path) -> None:

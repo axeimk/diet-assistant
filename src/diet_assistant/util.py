@@ -32,6 +32,11 @@ def reporting_date(moment: datetime, *, starts_at: time = time.min) -> date:
     return day - timedelta(days=1) if moment.timetz().replace(tzinfo=None) < starts_at else day
 
 
+def age_on(birth_date: date, on_date: date) -> int:
+    before_birthday = (on_date.month, on_date.day) < (birth_date.month, birth_date.day)
+    return on_date.year - birth_date.year - before_birthday
+
+
 def json_dump(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, default=str)
 

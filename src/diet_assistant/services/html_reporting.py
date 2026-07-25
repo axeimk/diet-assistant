@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import statistics
+from collections.abc import Sequence
 from datetime import date, time, timedelta
 from functools import cache
 from importlib.resources import files
@@ -9,7 +10,15 @@ from typing import TypedDict
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
-from .reporting import DailySummary, PeriodSummary, period_summary
+from .finding import Finding
+from .reporting import (
+    NUTRIENT_LABELS,
+    DailySummary,
+    PeriodSummary,
+    findings_markdown,
+    nutrient_reference,
+    period_summary,
+)
 
 
 class DailyTrendPoint(TypedDict):
@@ -116,7 +125,8 @@ def weekly_trend(
 
 def daily_html(
     summary: DailySummary,
-    advice: dict[str, object],
+    advice: dict[str, object] | None,
+    findings: Sequence[Finding],
     goal_evaluation: dict[str, object] | None,
     trend: list[DailyTrendPoint],
 ) -> str:
@@ -130,12 +140,16 @@ def daily_html(
         advice=advice,
         goal_evaluation=goal_evaluation,
         trend=trend,
+        finding_lines=findings_markdown(findings),
+        nutrient_labels=list(NUTRIENT_LABELS.items()),
+        nutrient_reference=nutrient_reference,
     )
 
 
 def weekly_html(
     summary: PeriodSummary,
-    advice: dict[str, object],
+    advice: dict[str, object] | None,
+    findings: Sequence[Finding],
     trend: list[WeeklyTrendPoint],
 ) -> str:
     return _render(
@@ -146,6 +160,7 @@ def weekly_html(
         report_kind="weekly",
         summary=summary,
         advice=advice,
+        finding_lines=findings_markdown(findings),
         trend=trend,
     )
 

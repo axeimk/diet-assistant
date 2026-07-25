@@ -9,7 +9,16 @@ from typing import cast
 
 from ..db import connect, transaction
 from ..repository import get_goal, insert
-from ..util import day_bounds, now_iso, optional_number, require_int, require_number, require_str
+from ..services.nutrition import nutrient_targets
+from ..util import (
+    age_on,
+    day_bounds,
+    now_iso,
+    optional_number,
+    require_int,
+    require_number,
+    require_str,
+)
 
 KCAL_PER_KG = 7700
 MAX_DEFICIT_RATIO = 0.25
@@ -97,9 +106,7 @@ def calculate_energy_targets(
         raise ValueError("height_cm は数値である必要があります")
     if not isinstance(birth_value, str):
         raise ValueError("birth_date は日付文字列である必要があります")
-    birth_date = date.fromisoformat(birth_value)
-    before_birthday = (on_date.month, on_date.day) < (birth_date.month, birth_date.day)
-    age = on_date.year - birth_date.year - before_birthday
+    age = age_on(date.fromisoformat(birth_value), on_date)
     sex_adjustment = 5 if sex == "male" else -161
     basal_metabolic_rate = 10 * weight + 6.25 * float(height_value) - 5 * age + sex_adjustment
     activity_factor = ACTIVITY_FACTORS[cast(str, activity_level)]
@@ -147,12 +154,18 @@ def save_plan(
     goal = get_goal(path, goal_id)
     calculation = calculate_plan(goal, today=today)
     calculation_day = today or date.today()
+    basis_weight = latest_weight(path) or require_number(goal, "start_weight")
     energy = calculate_energy_targets(
         profile or {},
-        weight=require_number(goal, "start_weight"),
+        weight=basis_weight,
         theoretical_daily_deficit=require_number(calculation, "estimated_daily_deficit"),
         on_date=calculation_day,
         days_remaining=require_int(calculation, "days_remaining"),
+    )
+    targets = nutrient_targets(
+        profile or {},
+        target_calories=optional_number(energy, "target_daily_calories"),
+        on_date=calculation_day,
     )
     with transaction(path) as connection:
         _ = connection.execute(
@@ -172,6 +185,8 @@ def save_plan(
                 energy, "estimated_maintenance_calories"
             ),
             "planned_daily_deficit": optional_number(energy, "planned_daily_deficit"),
+            "nutrient_targets": json.dumps(targets, ensure_ascii=False) if targets else None,
+            "basis_weight": basis_weight,
             "target_weekly_exercise_minutes": calculation["target_weekly_exercise_minutes"],
             "target_weekly_weight_change": calculation["target_weekly_weight_change"],
             "step_target": calculation["step_target"],
@@ -184,7 +199,43 @@ def save_plan(
             "status": "active",
         },
     )
-    return {"plan_id": plan_id, **calculation, "energy": energy}
+    return {
+        "plan_id": plan_id,
+        **calculation,
+        "basis_weight": basis_weight,
+        "energy": energy,
+        "nutrient_targets": targets,
+    }
+
+
+def active_plan(path: Path) -> dict[str, object]:
+    """有効な目標に紐づく最新の計画。無ければ空の辞書。"""
+    with connect(path) as connection:
+        plan = cast(
+            sqlite3.Row | None,
+            connection.execute(
+                "SELECT p.* FROM plans p JOIN goals g ON p.goal_id=g.id "
+                + "WHERE p.status='active' AND g.status='active' AND g.deleted_at IS NULL "
+                + "ORDER BY p.id DESC LIMIT 1"
+            ).fetchone(),
+        )
+    return cast(dict[str, object], dict(plan)) if plan else {}
+
+
+def latest_weight(path: Path) -> float | None:
+    """直近の実測体重。維持カロリーの前提に使う。"""
+    with connect(path) as connection:
+        row = cast(
+            sqlite3.Row | None,
+            connection.execute(
+                "SELECT weight FROM body_metrics WHERE weight IS NOT NULL "
+                + "ORDER BY measured_at DESC, id DESC LIMIT 1"
+            ).fetchone(),
+        )
+    if row is None:
+        return None
+    value = cast(object, row["weight"])
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
 def evaluate_goal(

@@ -55,9 +55,18 @@
     <h2><span class="sheet__index">1</span>今日の一手</h2>
   </div>
   <div class="statement">
+    {% if advice %}
     <p class="statement__lead">{{ advice.situation }}</p>
     <p class="statement__action">{{ advice.priority_action }}</p>
+    {% else %}
+    <p class="note">助言は未記載です。分析結果から書いて <code>diet advice save</code> で保存してください。</p>
+    {% endif %}
   </div>
+  <ul class="findings">
+    {% for line in finding_lines %}
+    <li>{{ line[2:] }}</li>
+    {% endfor %}
+  </ul>
 </section>
 
 <section class="sheet" aria-labelledby="trend-heading">
@@ -154,11 +163,22 @@
       <p class="subhead">栄養集計</p>
       {% if summary.meals %}
       <dl class="pairs">
-        <div><dt>たんぱく質</dt><dd>{{ "%.1f" | format(totals.protein) }} g</dd></div>
-        <div><dt>脂質</dt><dd>{{ "%.1f" | format(totals.fat) }} g</dd></div>
-        <div><dt>炭水化物</dt><dd>{{ "%.1f" | format(totals.carbohydrates) }} g</dd></div>
-        <div><dt>食物繊維</dt><dd>{{ "%.1f" | format(totals.fiber) }} g</dd></div>
-        <div><dt>食塩相当量</dt><dd>{{ "%.1f" | format(totals.sodium) }} g</dd></div>
+        {% for label, name in nutrient_labels %}
+        <div>
+          <dt>{{ label }}</dt>
+          <dd>
+            {% if name not in summary.recorded_nutrients %}
+            記録なし
+            {% else %}
+            {{ "%.1f" | format(totals[name]) }} g
+            {% set comparison = summary.nutrients.get(name) %}
+            {% if comparison %}
+            <span class="note">{{ nutrient_reference(comparison) }}</span>
+            {% endif %}
+            {% endif %}
+          </dd>
+        </div>
+        {% endfor %}
       </dl>
       {% else %}
       <p class="note">食事の記録はありません。</p>

@@ -62,4 +62,6 @@ SQLiteを正本に食事・運動・体重・目標を長期記録し、CLIとAI
 - 日次・週次レポートの作成はwrite-reportスキルの手順に従う。
 - 記録やレポートの依頼を受けたら、`config/profile.json`の`routine`（実施順のルーティーン）と同じレポート日の記録を照合し、抜けている先行ステップがあれば一言だけ確認する。詰問調にせず、「していない」という返答はそれで完結とする。`snack`は任意ステップなので、抜けていても確認しない。
 - 食事を記録するときは`config/profile.json`の`allergies`・`dietary_restrictions`と推定した品目を照合し、該当しそうなものがあれば記録はそのまま行ったうえで「〜の可能性がある」と一言だけ添える。断定せず、症状や対処には踏み込まない。
-- 助言や一言コメントを自分の言葉で書くときは、`config/profile.json`の`advice_preference`（自由記述の助言方針）に沿わせる。CLIが生成したレポートMarkdownと助言の文言はこの方針で書き換えない。
+- 助言の文面はエージェントが書く。CLIは`diet advice today|weekly`で分析結果（findings）だけを返し、文面を生成しない（ADR 0013）。書いた助言は`diet advice save`でDBへ保存し、レポートはそれを埋め込む。
+- 助言や一言コメントは`config/profile.json`の`advice_preference`（自由記述の助言方針）に沿わせる。findingsに無い数値・頻度・品目を推測で書かない。
+- カロリー管理が最優先。findingsの順位（goal→calorie→nutrition）を並べ替えず、`calorie_headroom`が0以下のときに栄養素を満たすための追加摂取を勧めない（不足は置き換えで解消する。ADR 0014）。

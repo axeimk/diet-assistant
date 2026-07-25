@@ -23,9 +23,10 @@ description: diet-assistantへ食事を記録する標準手順。写真・テ�
    JSONファイルは一時ディレクトリに書く（リポジトリ内に残さない）。
 7. `diet meal show <id>` で読み戻し、日時・区分・範囲・品目を検証する。
    戻り値だけを信じず、必ず読み戻す。
-8. `diet report daily --date <レポート日> --format json` と
-   `diet advice today --date <レポート日>` を
-   実行し、フィードバックを組み立てる（下記「記録後のフィードバック」）。
+8. `diet meal add` の戻り値の `day_context`（その日の摂取・残りカロリー・残り食数・
+   栄養素の目安との差）と、必要なら
+   `diet report daily --date <レポート日> --format json` を使って
+   フィードバックを組み立てる（下記「記録後のフィードバック」）。
 
 ## ルーティーン確認
 
@@ -97,17 +98,26 @@ description: diet-assistantへ食事を記録する標準手順。写真・テ�
 登録結果の説明に続けて、この3点を短く返す（合計5行程度まで）:
 
 1. **登録内容と仮定**: 何をどう推定したか。確信度が `low` の品目はそう言う。
-2. **目標に対する現在地**: `advice today` の `evidence`（摂取・目標・残り）を数値で示す。
+2. **目標に対する現在地**: `day_context` の `consumed_calories`・`target_daily_calories`・
+   `remaining_calories`・`remaining_meals` を数値で示す。
    目標未設定・プロフィール不足でCLIが計算できないときは、その旨だけ伝える。
-3. **一言評価と助言**: `advice today` の `priority_action` を軸に1つだけ。
-   P/F/C・食塩に目立つ偏りがあれば事実として添える。順調な日はまずそれを認める。
-   残り摂取可能カロリーが少ない・超過している日でも、極端な制限や翌日での相殺は
-   提案しない（7日以上の傾向で判断する）。
+3. **一言評価と助言**: 行動はひとつだけ。`day_context` の `nutrients`
+   （記録済み栄養素と目安との差）に目立つ偏りがあれば事実として添える。
+   順調な日はまずそれを認める。残り摂取可能カロリーが少ない・超過している日でも、
+   極端な制限や翌日での相殺は提案しない（7日以上の傾向で判断する）。
+   **`remaining_calories` が0以下のときに、栄養素を満たすための追加摂取を勧めない。**
+   足りない栄養素は次の食事での置き換えとして言う（ADR 0014）。
 
-自分の言葉で書くこの3点は、`config/profile.json` の `advice_preference`
-（自由記述の助言方針。例: 「まずは継続可能な変更を優先」）に沿わせる。未設定なら何もしない。
-方針を反映するのは自分の文章だけで、`advice today` や `diet report` がCLIで生成した
-文言そのものは書き換えない（数値も助言文もCLI出力が正本のため）。
+助言の文面は自分が書く（CLIは文面を作らない。ADR 0013）。`config/profile.json` の
+`advice_preference`（自由記述の助言方針。例: 「まずは継続可能な変更を優先」）に沿わせる。
+未設定なら平坦に書く。数値は `day_context` にあるものだけを使い、
+測っていない頻度や品目の傾向を推測で書かない。
+
+食後の一言を記録として残す場合は、JSONに書いて保存する:
+
+```bash
+diet advice save --json /tmp/advice.json --kind after_meal --meal-id <id> --date <レポート日>
+```
 
 ## 注意点
 
