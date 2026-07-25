@@ -42,7 +42,7 @@ CLI / Codex / iPhone inbox JSON
 | `exercises` | 運動 | 種目ごとの任意属性 |
 | `body_metrics` | 身体測定 | 体重・体脂肪率・胴囲 |
 | `intake_entries` | 共通取り込み | external_id一意、状態遷移と結果ID |
-| `advice_history` | 助言履歴 | 期間、根拠、優先度を保存 |
+| `advice_history` | 助言 | 種別・期間・対象食事ごとに最新1件を保存 |
 
 ## CLI設計
 

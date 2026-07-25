@@ -8,7 +8,7 @@ from typing import cast
 
 from ..config import profile_day_start_time
 from ..db import connect
-from ..repository import insert
+from ..repository import upsert
 from ..util import now_iso, optional_number, reporting_date, require_int, require_str
 from .reporting import daily_summary, period_summary
 
@@ -130,7 +130,7 @@ def generate_meal_advice(
         },
     }
     if save:
-        _save_advice(path, "after_meal", day, day, result)
+        _save_advice(path, "after_meal", day, day, result, meal_id=require_int(meal, "id"))
     return result
 
 
@@ -195,19 +195,26 @@ def _save_advice(
     period_start: date,
     period_end: date,
     result: dict[str, object],
+    *,
+    meal_id: int | None = None,
 ) -> None:
-    _ = insert(
+    """助言を履歴へ保存する。
+
+    同じ種別・期間（食後助言は同じ食事）の助言は追記せず、最新の内容で上書きする。
+    """
+    _ = upsert(
         path,
         "advice_history",
         {
             "generated_at": now_iso(),
             "advice_type": advice_type,
+            "meal_id": meal_id,
             "period_start": period_start.isoformat(),
             "period_end": period_end.isoformat(),
             "summary": require_str(result, "situation"),
             "details": json.dumps(result, ensure_ascii=False),
             "evidence": json.dumps(result["evidence"], ensure_ascii=False),
             "priority": "normal",
-            "status": "active",
         },
+        conflict=("advice_type", "period_start", "period_end", "COALESCE(meal_id, 0)"),
     )

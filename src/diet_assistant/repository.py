@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import cast
 
@@ -23,6 +23,29 @@ def insert(path: Path, table: str, data: dict[str, object]) -> int:
         if cursor.lastrowid is None:
             raise sqlite3.DatabaseError(f"{table} のIDを取得できませんでした")
         return cursor.lastrowid
+
+
+def upsert(path: Path, table: str, data: dict[str, object], *, conflict: Sequence[str]) -> int:
+    """`conflict`が示す一意キーの行があれば更新し、なければ挿入する。
+
+    `conflict`にはUNIQUE索引と同じ列（または索引式）を索引の定義順で渡す。
+    """
+    columns = ", ".join(data)
+    placeholders = ", ".join("?" for _ in data)
+    assignments = ", ".join(f"{column} = excluded.{column}" for column in data)
+    with transaction(path) as connection:
+        row = cast(
+            sqlite3.Row | None,
+            connection.execute(
+                f"INSERT INTO {table} ({columns}) VALUES ({placeholders}) "
+                + f"ON CONFLICT ({', '.join(conflict)}) DO UPDATE SET {assignments} "
+                + "RETURNING id",
+                tuple(data.values()),
+            ).fetchone(),
+        )
+        if row is None:
+            raise sqlite3.DatabaseError(f"{table} のIDを取得できませんでした")
+        return cast(int, row["id"])
 
 
 def get(path: Path, table: str, record_id: int) -> dict[str, object]:

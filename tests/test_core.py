@@ -161,6 +161,10 @@ def _initialize_v1(path: Path) -> None:
             + "target_weekly_exercise_minutes INTEGER, target_weekly_weight_change REAL NOT NULL, "
             + "protein_target REAL, step_target INTEGER, assumptions TEXT NOT NULL, "
             + "weekly_actions TEXT NOT NULL, safety_note TEXT, status TEXT NOT NULL);"
+            + "CREATE TABLE advice_history (id INTEGER PRIMARY KEY, generated_at TEXT NOT NULL, "
+            + "advice_type TEXT NOT NULL, period_start TEXT NOT NULL, period_end TEXT NOT NULL, "
+            + "summary TEXT NOT NULL, details TEXT NOT NULL, evidence TEXT NOT NULL, "
+            + "priority TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active');"
             + "INSERT INTO meals (eaten_at, protein) VALUES ('2026-07-20T12:00:00+09:00', 10);"
         )
         _ = connection.execute("PRAGMA user_version = 1")
@@ -173,7 +177,7 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
 
     applied = migrate(path)
 
-    assert applied == [2, 3, 4, 5]
+    assert applied == [2, 3, 4, 5, 6]
     assert schema_version(path) == SCHEMA_VERSION
     with connect(path) as connection:
         row = tuple(
@@ -198,6 +202,55 @@ def test_migration_adds_sodium_and_keeps_rows(tmp_path: Path) -> None:
     assert {"success_threshold_weight", "evaluation_window_days", "deleted_at"} <= goal_columns
 
 
+def _insert_v1_advice(
+    path: Path, advice_type: str, day: str, generated_at: str, summary: str, meal_id: int | None
+) -> None:
+    details = json.dumps(
+        {"situation": summary, **({"meal_id": meal_id} if meal_id is not None else {})},
+        ensure_ascii=False,
+    )
+    with connect(path) as connection:
+        with connection:
+            _ = connection.execute(
+                "INSERT INTO advice_history (generated_at, advice_type, period_start, "
+                + "period_end, summary, details, evidence, priority, status) "
+                + "VALUES (?, ?, ?, ?, ?, ?, '{}', 'normal', 'active')",
+                (generated_at, advice_type, day, day, summary, details),
+            )
+
+
+def test_migration_keeps_only_latest_advice_per_period(tmp_path: Path) -> None:
+    path = tmp_path / "data/diet.db"
+    _initialize_v1(path)
+    day = "2026-07-20"
+    _insert_v1_advice(path, "daily", day, "2026-07-20T09:00:00+09:00", "朝の助言", None)
+    _insert_v1_advice(path, "daily", day, "2026-07-20T21:00:00+09:00", "夜の助言", None)
+    _insert_v1_advice(path, "7day", day, "2026-07-20T21:00:00+09:00", "週の助言", None)
+    _insert_v1_advice(path, "after_meal", day, "2026-07-20T12:30:00+09:00", "食後の助言", 1)
+    _insert_v1_advice(path, "after_meal", day, "2026-07-20T13:00:00+09:00", "消えた食事", 999)
+
+    _ = migrate(path)
+
+    with connect(path) as connection:
+        rows = [
+            (
+                cast(str, row["advice_type"]),
+                cast(str, row["summary"]),
+                cast(int | None, row["meal_id"]),
+            )
+            for row in cast(
+                list[sqlite3.Row],
+                connection.execute("SELECT * FROM advice_history ORDER BY id").fetchall(),
+            )
+        ]
+
+    assert rows == [
+        ("daily", "夜の助言", None),
+        ("7day", "週の助言", None),
+        ("after_meal", "食後の助言", 1),
+    ], "期間ごとに最新1件だけを残し、食事が消えた食後助言は捨てる"
+
+
 def test_migration_is_not_reapplied(tmp_path: Path) -> None:
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
@@ -210,7 +263,7 @@ def test_initialize_migrates_existing_db(tmp_path: Path) -> None:
     path = tmp_path / "data/diet.db"
     _initialize_v1(path)
 
-    assert initialize(path) == [2, 3, 4, 5]
+    assert initialize(path) == [2, 3, 4, 5, 6]
     assert schema_version(path) == SCHEMA_VERSION
 
 

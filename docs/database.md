@@ -26,7 +26,7 @@ Diet Assistantが正式な記録として使用するSQLiteデータベースの
 | `exercises` | 有酸素運動・筋力トレーニングなどの記録 | 独立 |
 | `body_metrics` | 体重・体脂肪率・胴囲の測定記録 | 独立 |
 | `intake_entries` | inboxなど外部入力の受信・処理履歴 | 結果を種別とIDで論理参照 |
-| `advice_history` | 日次・食後・期間助言の生成履歴 | 独立 |
+| `advice_history` | 日次・食後・期間助言の最新内容 | `meals.id`を参照（食後助言のみ） |
 
 次のER図には、SQLiteの外部キーとして定義されている関連だけを示します。
 
@@ -227,20 +227,24 @@ iPhoneショートカットなどから受け取った入力について、重�
 
 ## `advice_history`
 
-生成した助言と、その根拠を履歴として保持します。
+生成した助言と、その根拠を保持します。同じ種別・期間（食後助言は同じ食事）の助言は
+追記せず上書きするため、行数は「記録した日数 + 食事件数」の範囲に収まります。
 
 | 列 | SQLite型 | NULL | 既定値 | 説明・制約 |
 | --- | --- | --- | --- | --- |
 | `id` | `INTEGER` | 不可 | 自動採番 | 主キー |
-| `generated_at` | `TEXT` | 不可 | なし | 生成日時 |
+| `generated_at` | `TEXT` | 不可 | なし | 最後に生成した日時 |
 | `advice_type` | `TEXT` | 不可 | なし | `daily`、`after_meal`、`7day`などの助言種別 |
+| `meal_id` | `INTEGER` | 可 | なし | 食後助言の対象食事。`meals.id`を参照し、削除時は連動して消える |
 | `period_start` | `TEXT` | 不可 | なし | 根拠期間の開始日 |
 | `period_end` | `TEXT` | 不可 | なし | 根拠期間の終了日 |
 | `summary` | `TEXT` | 不可 | なし | 状況の要約 |
 | `details` | `TEXT` | 不可 | なし | 助言全体を保持するJSONオブジェクト |
 | `evidence` | `TEXT` | 不可 | なし | 数値根拠を保持するJSONオブジェクト |
 | `priority` | `TEXT` | 不可 | なし | 優先度。現在は`normal` |
-| `status` | `TEXT` | 不可 | `active` | 履歴の状態 |
+
+一意キーは`(advice_type, period_start, period_end, COALESCE(meal_id, 0))`です
+（索引`advice_history_key`）。
 
 ## 変更時の更新箇所
 

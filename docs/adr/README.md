@@ -55,3 +55,4 @@
 | [0007](0007-unrecorded-values-are-missing.md) | 未記録の値をゼロとして集計しない | 承認済み |
 | [0008](0008-report-design-language.md) | HTMLレポートは面ではなく罫線で構造を作り、系列色は実測と参照の2色に固定する | 承認済み |
 | [0009](0009-goal-deletion-is-logical.md) | 目標の削除は論理削除にし、planは残す | 承認済み |
+| [0010](0010-advice-history-keeps-latest-only.md) | 助言は種別・期間ごとに最新1件だけを保持する | 承認済み |

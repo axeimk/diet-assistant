@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -32,6 +32,8 @@ def initialize(path: Path) -> list[int]:
     """スキーマを作成し、既存DBには未適用のマイグレーションを適用する。
 
     戻り値は適用したマイグレーションのバージョン一覧（新規作成時は空）。
+    既存DBではマイグレーションを先に適用する。`SCHEMA_SQL`は最新スキーマを前提にした
+    索引を含むため、列の追加より先に流すと失敗する。
     """
     with connect(path) as connection:
         fresh = (
@@ -40,11 +42,12 @@ def initialize(path: Path) -> list[int]:
             ).fetchone()
             is None
         )
+    applied = [] if fresh else migrate(path)
     with transaction(path) as connection:
         _ = connection.executescript(SCHEMA_SQL)
         if fresh:
             _ = connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-    return [] if fresh else migrate(path)
+    return applied
 
 
 def schema_version(path: Path) -> int:
@@ -85,6 +88,50 @@ ALTER TABLE meal_items ADD COLUMN fiber REAL CHECK(fiber >= 0);
 """,
     5: """
 ALTER TABLE goals ADD COLUMN deleted_at TEXT;
+""",
+    # 助言履歴を「種別・期間ごとに最新1件」へ作り直す。重複していた過去の行は最新だけを残し、
+    # 食事が既に削除されている食後助言は捨てる。
+    6: """
+CREATE TABLE advice_history_rebuilt (
+    id INTEGER PRIMARY KEY,
+    generated_at TEXT NOT NULL,
+    advice_type TEXT NOT NULL,
+    meal_id INTEGER REFERENCES meals(id) ON DELETE CASCADE,
+    period_start TEXT NOT NULL,
+    period_end TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    details TEXT NOT NULL,
+    evidence TEXT NOT NULL,
+    priority TEXT NOT NULL
+);
+INSERT INTO advice_history_rebuilt
+    (id, generated_at, advice_type, meal_id, period_start, period_end,
+     summary, details, evidence, priority)
+SELECT h.id, h.generated_at, h.advice_type,
+       CAST(json_extract(h.details, '$.meal_id') AS INTEGER),
+       h.period_start, h.period_end, h.summary, h.details, h.evidence, h.priority
+FROM advice_history h
+WHERE h.id = (
+        SELECT o.id FROM advice_history o
+        WHERE o.advice_type = h.advice_type
+          AND o.period_start = h.period_start
+          AND o.period_end = h.period_end
+          AND COALESCE(CAST(json_extract(o.details, '$.meal_id') AS INTEGER), 0)
+              = COALESCE(CAST(json_extract(h.details, '$.meal_id') AS INTEGER), 0)
+        ORDER BY o.generated_at DESC, o.id DESC
+        LIMIT 1
+    )
+  AND (
+        json_extract(h.details, '$.meal_id') IS NULL
+        OR EXISTS (
+            SELECT 1 FROM meals m
+            WHERE m.id = CAST(json_extract(h.details, '$.meal_id') AS INTEGER)
+        )
+    );
+DROP TABLE advice_history;
+ALTER TABLE advice_history_rebuilt RENAME TO advice_history;
+CREATE UNIQUE INDEX IF NOT EXISTS advice_history_key
+    ON advice_history(advice_type, period_start, period_end, COALESCE(meal_id, 0));
 """,
 }
 
@@ -222,12 +269,15 @@ CREATE TABLE IF NOT EXISTS advice_history (
     id INTEGER PRIMARY KEY,
     generated_at TEXT NOT NULL,
     advice_type TEXT NOT NULL,
+    meal_id INTEGER REFERENCES meals(id) ON DELETE CASCADE,
     period_start TEXT NOT NULL,
     period_end TEXT NOT NULL,
     summary TEXT NOT NULL,
     details TEXT NOT NULL,
     evidence TEXT NOT NULL,
-    priority TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'active'
+    priority TEXT NOT NULL
 );
+-- 助言は種別・期間（食後助言は対象の食事）ごとに最新の1件だけを保持する。
+CREATE UNIQUE INDEX IF NOT EXISTS advice_history_key
+    ON advice_history(advice_type, period_start, period_end, COALESCE(meal_id, 0));
 """
