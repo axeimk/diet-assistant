@@ -12,9 +12,14 @@ from ..db import connect
 from ..util import day_bounds, require_str
 from .finding import Finding
 from .nutrition import NutrientComparison, NutrientTarget, compare_nutrients
+from .planning import (
+    current_required_weekly_weight_change,
+    initial_target_weekly_weight_change,
+)
 
 NutrientKey = Literal["protein", "fat", "carbohydrates", "fiber", "sodium"]
 NUTRIENT_KEYS: tuple[NutrientKey, ...] = ("protein", "fat", "carbohydrates", "fiber", "sodium")
+PACE_TOLERANCE = 0.1
 
 
 class MealRecord(TypedDict):
@@ -80,6 +85,15 @@ class Changes(TypedDict):
     average_weight: float | None
 
 
+class GoalProgress(TypedDict):
+    initial_target_weekly_weight_change: float
+    current_required_weekly_weight_change: float | None
+    actual_weekly_weight_change: float | None
+    status: Literal["on_track", "behind"] | None
+    current_weight_measurements: int
+    previous_weight_measurements: int
+
+
 class PeriodSummary(TypedDict):
     period_start: str
     period_end: str
@@ -93,8 +107,74 @@ class PeriodSummary(TypedDict):
     daily: list[DailySummary]
     previous_week: NotRequired[dict[str, float | None]]
     changes: NotRequired[Changes]
+    goal_progress: NotRequired[GoalProgress | None]
     target_weekly_weight_change: NotRequired[float | None]
     pace_difference: NotRequired[float | None]
+
+
+def goal_progress(
+    path: Path, end_day: date, *, day_start: time = time.min
+) -> GoalProgress | None:
+    _, report_end = day_bounds(end_day, starts_at=day_start)
+    with connect(path) as connection:
+        goal_row = cast(
+            sqlite3.Row | None,
+            connection.execute(
+                "SELECT g.* FROM goals g JOIN plans p ON p.goal_id=g.id "
+                + "WHERE g.status='active' AND g.deleted_at IS NULL "
+                + "AND p.status='active' ORDER BY p.id DESC LIMIT 1"
+            ).fetchone(),
+        )
+        metric_row = cast(
+            sqlite3.Row | None,
+            connection.execute(
+                "SELECT weight FROM body_metrics "
+                + "WHERE weight IS NOT NULL AND measured_at <= ? "
+                + "ORDER BY measured_at DESC, id DESC LIMIT 1",
+                (report_end,),
+            ).fetchone(),
+        )
+    if goal_row is None:
+        return None
+
+    goal = cast(dict[str, object], dict(goal_row))
+    initial_target = initial_target_weekly_weight_change(goal)
+    current = period_summary(path, end_day, 7, day_start=day_start)
+    previous = period_summary(path, end_day - timedelta(days=7), 7, day_start=day_start)
+    current_average = current["average_weight"]
+    previous_average = previous["average_weight"]
+    actual = _difference(current_average, previous_average)
+
+    current_required: float | None = None
+    if metric_row is not None:
+        weight_value = cast(object, metric_row["weight"])
+        if isinstance(weight_value, (int, float)) and not isinstance(weight_value, bool):
+            try:
+                current_required = current_required_weekly_weight_change(
+                    goal, current_weight=float(weight_value), today=end_day
+                )
+            except ValueError:
+                # 期限後のレポートでは残り期間がないため、現在必要ペースは算出しない。
+                current_required = None
+
+    status: Literal["on_track", "behind"] | None = None
+    if actual is not None:
+        if initial_target < 0:
+            behind = actual > initial_target + PACE_TOLERANCE
+        elif initial_target > 0:
+            behind = actual < initial_target - PACE_TOLERANCE
+        else:
+            behind = abs(actual) > PACE_TOLERANCE
+        status = "behind" if behind else "on_track"
+
+    return {
+        "initial_target_weekly_weight_change": initial_target,
+        "current_required_weekly_weight_change": current_required,
+        "actual_weekly_weight_change": actual,
+        "status": status,
+        "current_weight_measurements": current["weight_measurements"],
+        "previous_weight_measurements": previous["weight_measurements"],
+    }
 
 
 def daily_summary(path: Path, day: date, *, day_start: time = time.min) -> DailySummary:
@@ -238,18 +318,12 @@ def weekly_summary(path: Path, end_day: date, *, day_start: time = time.min) -> 
         "average_weight": _difference(current["average_weight"], previous["average_weight"]),
     }
     current["changes"] = changes
-    with connect(path) as connection:
-        plan = cast(
-            sqlite3.Row | None,
-            connection.execute(
-                "SELECT p.target_weekly_weight_change FROM plans p "
-                + "JOIN goals g ON g.id=p.goal_id "
-                + "WHERE g.status='active' AND p.status='active' ORDER BY p.id DESC LIMIT 1"
-            ).fetchone(),
-        )
-    target_value = plan["target_weekly_weight_change"] if plan else None
-    target_change = float(target_value) if isinstance(target_value, (int, float)) else None
-    actual_change = changes["average_weight"]
+    progress = goal_progress(path, end_day, day_start=day_start)
+    current["goal_progress"] = progress
+    target_change = (
+        progress["initial_target_weekly_weight_change"] if progress is not None else None
+    )
+    actual_change = progress["actual_weekly_weight_change"] if progress is not None else None
     current["target_weekly_weight_change"] = target_change
     current["pace_difference"] = _difference(actual_change, target_change)
     return current
@@ -380,11 +454,41 @@ def _signed(value: float) -> str:
     return "±0" if value == 0 else f"{'+' if value > 0 else '−'}{_amount(abs(value))}"
 
 
+def _pace_text(value: float | None) -> str:
+    return f"{_amount(value)} kg/週" if value is not None else "算出不可"
+
+
+def _goal_progress_lines(progress: GoalProgress | None) -> list[str]:
+    if progress is None:
+        return []
+    if progress["status"] == "on_track":
+        status = "順調"
+    elif progress["status"] == "behind":
+        status = "遅れ"
+    else:
+        status = "判定材料不足"
+    return [
+        "",
+        "## 目標ペース",
+        f"- 状態: {status}",
+        "- 当初目標ペース: "
+        + _pace_text(progress["initial_target_weekly_weight_change"]),
+        "- 現在必要ペース（参考）: "
+        + _pace_text(progress["current_required_weekly_weight_change"]),
+        "- 実績ペース（参考）: "
+        + _pace_text(progress["actual_weekly_weight_change"]),
+        "- 実績ペースの測定数: "
+        + f"直近7日 {progress['current_weight_measurements']}回 / "
+        + f"前の7日 {progress['previous_weight_measurements']}回",
+    ]
+
+
 def daily_markdown(
     summary: DailySummary,
     feedback: dict[str, object] | None = None,
     findings: Sequence[Finding] | None = None,
     goal_evaluation: dict[str, object] | None = None,
+    goal_progress: GoalProgress | None = None,
 ) -> str:
     totals = summary["totals"]
     metric = summary["metric"]
@@ -468,6 +572,7 @@ def daily_markdown(
             "",
             "## 分析結果",
             *findings_markdown(findings or []),
+            *_goal_progress_lines(goal_progress),
             *evaluation_lines,
             "",
             "## 不確実性の高い記録",
@@ -509,6 +614,7 @@ def weekly_markdown(
         missing.append(f"食事記録 {7 - summary['recorded_meal_days']}日分")
     if summary["weight_measurements"] < 3:
         missing.append("体重（週3回未満）")
+    progress = summary.get("goal_progress")
     return "\n".join(
         [
             f"# 週次レポート {summary['period_start']}〜{summary['period_end']}",
@@ -519,8 +625,7 @@ def weekly_markdown(
             f"- 体重7日平均: {average_weight} kg",
             "- 前週との差（カロリー/体重）: "
             + f"{changes['average_calories']} kcal / {changes['average_weight']} kg",
-            f"- 目標ペース: {summary.get('target_weekly_weight_change')} kg/週",
-            f"- 実績と目標ペースの差: {summary.get('pace_difference')} kg/週",
+            *_goal_progress_lines(progress),
             "",
             "## 分析結果",
             *findings_markdown(findings or []),

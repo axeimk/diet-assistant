@@ -33,17 +33,64 @@ ACTIVITY_FACTORS = {
 }
 
 
-def calculate_plan(goal: dict[str, object], *, today: date | None = None) -> dict[str, object]:
+def initial_target_weekly_weight_change(goal: dict[str, object]) -> float:
+    """目標登録時の体重差と期間から、固定の当初目標ペースを求める。"""
+    started_at = date.fromisoformat(require_str(goal, "started_at")[:10])
+    target_date = date.fromisoformat(require_str(goal, "target_date")[:10])
+    initial_days = (target_date - started_at).days
+    if initial_days <= 0:
+        raise ValueError("目標日は開始日より後にしてください")
+    change = require_number(goal, "target_weight") - require_number(goal, "start_weight")
+    return round(change / (initial_days / 7), 3)
+
+
+def current_required_weekly_weight_change(
+    goal: dict[str, object], *, current_weight: float, today: date
+) -> float:
+    """現在の実測体重から期限までに必要な週次変化を求める。
+
+    すでに目標体重へ到達している場合は、目標体重へ戻す方向の変化を要求せず0とする。
+    """
+    started_at = date.fromisoformat(require_str(goal, "started_at")[:10])
+    target_date = date.fromisoformat(require_str(goal, "target_date")[:10])
+    calculation_day = max(started_at, today)
+    days_remaining = (target_date - calculation_day).days
+    if days_remaining <= 0:
+        raise ValueError("目標日は計算日より後にしてください")
+    start_weight = require_number(goal, "start_weight")
+    target_weight = require_number(goal, "target_weight")
+    initial_change = target_weight - start_weight
+    remaining_change = target_weight - current_weight
+    if (initial_change < 0 <= remaining_change) or (initial_change > 0 >= remaining_change):
+        remaining_change = 0
+    return round(remaining_change / (days_remaining / 7), 3)
+
+
+def calculate_plan(
+    goal: dict[str, object],
+    *,
+    today: date | None = None,
+    current_weight: float | None = None,
+) -> dict[str, object]:
     today = today or date.today()
-    start = max(date.fromisoformat(require_str(goal, "started_at")[:10]), today)
+    started_at = date.fromisoformat(require_str(goal, "started_at")[:10])
+    start = max(started_at, today)
     target = date.fromisoformat(require_str(goal, "target_date")[:10])
     days = (target - start).days
     if days <= 0:
         raise ValueError("目標日は計算日より後にしてください")
+    initial_days = (target - started_at).days
+    if initial_days <= 0:
+        raise ValueError("目標日は開始日より後にしてください")
     start_weight = require_number(goal, "start_weight")
     change = require_number(goal, "target_weight") - start_weight
-    weekly_change = change / (days / 7)
-    daily_deficit = -change * KCAL_PER_KG / days
+    weekly_change = initial_target_weekly_weight_change(goal)
+    daily_deficit = -change * KCAL_PER_KG / initial_days
+    required_change = current_required_weekly_weight_change(
+        goal,
+        current_weight=current_weight if current_weight is not None else start_weight,
+        today=today,
+    )
     if change >= 0:
         feasibility = "review"
         safety = "増量・維持目標の摂取量はプロフィールと専門家の助言を踏まえて調整してください。"
@@ -56,7 +103,9 @@ def calculate_plan(goal: dict[str, object], *, today: date | None = None) -> dic
     return {
         "days_remaining": days,
         "weeks_remaining": round(days / 7, 2),
-        "target_weekly_weight_change": round(weekly_change, 3),
+        "target_weekly_weight_change": weekly_change,
+        "initial_target_weekly_weight_change": weekly_change,
+        "current_required_weekly_weight_change": required_change,
         "estimated_daily_deficit": round(daily_deficit),
         "feasibility": feasibility,
         "target_weekly_exercise_minutes": 150,
@@ -152,9 +201,9 @@ def save_plan(
     today: date | None = None,
 ) -> dict[str, object]:
     goal = get_goal(path, goal_id)
-    calculation = calculate_plan(goal, today=today)
     calculation_day = today or date.today()
     basis_weight = latest_weight(path) or require_number(goal, "start_weight")
+    calculation = calculate_plan(goal, today=today, current_weight=basis_weight)
     energy = calculate_energy_targets(
         profile or {},
         weight=basis_weight,

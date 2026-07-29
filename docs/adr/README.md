@@ -61,3 +61,4 @@
 | [0013](0013-agent-writes-feedback-cli-owns-findings.md) | フィードバックの文面はエージェントが書き、CLIは分析結果（findings）だけを正本として持つ | 承認済み |
 | [0014](0014-nutrient-targets-from-dietary-reference-intakes.md) | 栄養素の目安は食事摂取基準からコードで導出し、カロリー超過中は増量方向のフィードバックを出さない | 承認済み |
 | [0015](0015-feedback-is-the-canonical-implementation-name.md) | フィードバックの実装名も`feedback`に統一する | 承認済み |
+| [0016](0016-initial-target-pace-governs-calorie-plan.md) | 当初目標ペースをカロリー計画の基準として固定する | 承認済み |

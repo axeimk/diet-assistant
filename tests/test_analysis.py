@@ -163,7 +163,7 @@ def test_small_calorie_headroom_is_not_room_to_eat_more(db_path: Path) -> None:
     """目標レンジの幅（±100 kcal）に収まる程度の余裕では増量を許さない。"""
     _ = _goal(db_path)
     for day in range(19, 26):
-        _meal(db_path, day, calories=1650, protein=30, fiber=5)
+        _meal(db_path, day, calories=1720, protein=30, fiber=5)
 
     result = findings(db_path, END_DAY, 7, profile=PROFILE)
     fiber = _by_kind(result, "fiber_below_target")
@@ -294,7 +294,28 @@ def test_pace_behind_target_is_reported_against_the_plan(db_path: Path) -> None:
     assert pace["severity"] == "attention"
     assert pace["actual"] == -0.05
     assert pace["reference"] is not None and pace["reference"] < 0
-    assert pace["reference_basis"] == "計画の目標ペース"
+    assert pace["reference_basis"] == "当初目標ペース"
+
+
+def test_daily_finding_uses_seven_day_actual_pace_not_previous_day_change(
+    db_path: Path,
+) -> None:
+    """日次分析でも体重ペースは7日平均同士を比べ、前日差を7倍しない。"""
+    _ = _goal(db_path)
+    for day in range(19, 26):
+        _meal(db_path, day, calories=1600)
+    for offset in range(7):
+        _weight(db_path, date(2026, 7, 12) + timedelta(days=offset), 89.0)
+        _weight(db_path, date(2026, 7, 19) + timedelta(days=offset), 88.95)
+
+    result = findings(db_path, END_DAY, 1, profile=PROFILE)
+    pace = _by_kind(result, "goal_pace_behind")
+
+    assert pace["actual"] == -0.05
+    assert pace["reference_basis"] == "当初目標ペース"
+    assert pace["period_days"] == 7
+    assert pace["sample_days"] == 7
+    assert pace["detail"]["previous_weight_measurements"] == 7
 
 
 def test_pace_on_track_is_info_not_a_complaint(db_path: Path) -> None:

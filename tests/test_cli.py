@@ -158,10 +158,14 @@ def test_meal_and_daily_report_include_goal_based_numbers(
     assert main([*root_args, "report", "daily", "--date", today, "--format", "json"]) == 0
     report_output = cast(dict[str, object], cast(object, json.loads(capsys.readouterr().out)))
     goal_evaluation = cast(dict[str, object], report_output["goal_evaluation"])
+    goal_progress = cast(dict[str, object], report_output["goal_progress"])
     report_findings = cast(list[dict[str, object]], report_output["findings"])
     assert report_output["feedback"] is None, "フィードバックはエージェントが書くまで空"
     assert [f for f in report_findings if f["group"] == "calorie"]
     assert goal_evaluation["evaluation_window_days"] == 7
+    assert goal_progress["initial_target_weekly_weight_change"] is not None
+    assert "current_required_weekly_weight_change" in goal_progress
+    assert "actual_weekly_weight_change" in goal_progress
 
 
 def test_daily_report_generates_self_contained_html(

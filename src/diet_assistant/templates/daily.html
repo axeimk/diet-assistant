@@ -203,10 +203,26 @@
   </div>
 </section>
 
+{% if goal_progress %}
+<section class="sheet">
+  <div class="sheet__head">
+    <h2><span class="sheet__index">4</span>目標ペース</h2>
+    {% if goal_progress_badge %}{{ ui.status(goal_progress_badge) }}{% endif %}
+  </div>
+  <dl class="pairs pairs--split">
+    <div><dt>当初目標ペース</dt><dd>{{ goal_progress.initial_target_weekly_weight_change ~ " kg/週" if goal_progress.initial_target_weekly_weight_change is not none else "算出不可" }}</dd></div>
+    <div><dt>現在必要ペース（参考）</dt><dd>{{ goal_progress.current_required_weekly_weight_change ~ " kg/週" if goal_progress.current_required_weekly_weight_change is not none else "算出不可" }}</dd></div>
+    <div><dt>実績ペース（参考）</dt><dd>{{ goal_progress.actual_weekly_weight_change ~ " kg/週" if goal_progress.actual_weekly_weight_change is not none else "算出不可" }}</dd></div>
+    <div><dt>実績の測定数</dt><dd>直近7日 {{ goal_progress.current_weight_measurements }}回 / 前の7日 {{ goal_progress.previous_weight_measurements }}回</dd></div>
+  </dl>
+  <p class="note">現在必要ペースは現在地を把握する参考値です。早期達成が見込まれても、これを理由にカロリー計画を自動的に緩めません。</p>
+</section>
+{% endif %}
+
 {% if goal_evaluation %}
 <section class="sheet">
   <div class="sheet__head">
-    <h2><span class="sheet__index">4</span>目標の達成判定</h2>
+    <h2><span class="sheet__index">{{ 5 if goal_progress else 4 }}</span>目標の達成判定</h2>
   </div>
   <dl class="pairs pairs--split">
     <div>
@@ -226,7 +242,7 @@
 
 <section class="sheet">
   <div class="sheet__head">
-    <h2><span class="sheet__index">{{ 5 if goal_evaluation else 4 }}</span>不確実性の高い記録</h2>
+    <h2><span class="sheet__index">{{ 4 + (1 if goal_progress else 0) + (1 if goal_evaluation else 0) }}</span>不確実性の高い記録</h2>
   </div>
   {% if summary.uncertain_meal_ids %}
   <p class="note">食事ID {{ summary.uncertain_meal_ids | join(", ") }} は確信度が低い推定です。数値を鵜呑みにせず、傾向の目安として読んでください。</p>

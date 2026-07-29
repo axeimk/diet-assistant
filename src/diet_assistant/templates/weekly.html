@@ -179,9 +179,16 @@
       <dl class="pairs">
         <div><dt>平均カロリー差</dt><dd>{{ changes.average_calories ~ " kcal" if changes and changes.average_calories is not none else "算出不可" }}</dd></div>
         <div><dt>平均体重差</dt><dd>{{ changes.average_weight ~ " kg" if changes and changes.average_weight is not none else "算出不可" }}</dd></div>
-        <div><dt>目標ペース</dt><dd>{{ summary.target_weekly_weight_change ~ " kg/週" if summary.target_weekly_weight_change is not none else "未設定" }}</dd></div>
-        <div><dt>実績との差</dt><dd>{{ summary.pace_difference ~ " kg/週" if summary.pace_difference is not none else "算出不可" }}</dd></div>
+        {% if goal_progress %}
+        <div><dt>状態</dt><dd>{% if goal_progress_badge %}{{ ui.status(goal_progress_badge) }}{% else %}判定材料不足{% endif %}</dd></div>
+        <div><dt>当初目標ペース</dt><dd>{{ goal_progress.initial_target_weekly_weight_change ~ " kg/週" if goal_progress.initial_target_weekly_weight_change is not none else "算出不可" }}</dd></div>
+        <div><dt>現在必要ペース（参考）</dt><dd>{{ goal_progress.current_required_weekly_weight_change ~ " kg/週" if goal_progress.current_required_weekly_weight_change is not none else "算出不可" }}</dd></div>
+        <div><dt>実績ペース（参考）</dt><dd>{{ goal_progress.actual_weekly_weight_change ~ " kg/週" if goal_progress.actual_weekly_weight_change is not none else "算出不可" }}</dd></div>
+        {% else %}
+        <div><dt>当初目標ペース</dt><dd>{{ summary.target_weekly_weight_change ~ " kg/週" if summary.target_weekly_weight_change is not none else "未設定" }}</dd></div>
+        {% endif %}
       </dl>
+      <p class="note">現在必要ペースは参考値であり、早期達成が見込まれてもカロリー計画を自動的に緩める基準にはしません。</p>
     </div>
     <div>
       <p class="subhead">不足している記録</p>

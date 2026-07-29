@@ -31,7 +31,13 @@ from .services.html_reporting import daily_html, daily_trend, weekly_html, weekl
 from .services.intake import import_directory, process_entry
 from .services.maintenance import cleanup_candidates, cleanup_photos, create_backup
 from .services.planning import evaluate_active_goal, evaluate_goal, save_plan
-from .services.reporting import daily_markdown, daily_summary, weekly_markdown, weekly_summary
+from .services.reporting import (
+    daily_markdown,
+    daily_summary,
+    goal_progress,
+    weekly_markdown,
+    weekly_summary,
+)
 from .util import (
     json_dump,
     now_iso,
@@ -569,12 +575,14 @@ def _report(args: CliArgs, p: dict[str, Path]) -> object:
         goal_evaluation = evaluate_active_goal(
             p["db"], evaluation_date=day, day_start=day_start
         )
+        progress = goal_progress(p["db"], day, day_start=day_start)
         if args.format == "json":
             return {
                 **summary,
                 "findings": result_findings,
                 "feedback": feedback,
                 "goal_evaluation": goal_evaluation,
+                "goal_progress": progress,
             }
         if args.format == "html":
             content = daily_html(
@@ -583,10 +591,17 @@ def _report(args: CliArgs, p: dict[str, Path]) -> object:
                 result_findings,
                 goal_evaluation,
                 daily_trend(p["db"], day, day_start=day_start),
+                goal_progress=progress,
             )
             output = p["daily"] / f"{day}.html"
         else:
-            content = daily_markdown(summary, feedback, result_findings, goal_evaluation)
+            content = daily_markdown(
+                summary,
+                feedback,
+                result_findings,
+                goal_evaluation,
+                goal_progress=progress,
+            )
             output = p["daily"] / f"{day}.md"
     else:
         summary = weekly_summary(p["db"], day, day_start=day_start)

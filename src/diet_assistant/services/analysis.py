@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import statistics
 from collections import defaultdict
-from datetime import date, time, timedelta
+from datetime import date, time
 from pathlib import Path
 from typing import Literal, cast
 
@@ -25,6 +25,7 @@ from .reporting import (
     NUTRIENT_KEYS,
     DailySummary,
     NutrientKey,
+    goal_progress,
     period_summary,
     plan_nutrient_targets,
 )
@@ -151,42 +152,44 @@ def _goal_findings(
                 },
             )
         )
-    pace = _pace_finding(path, plan, end_day=end_day, days=days, day_start=day_start)
+    pace = _pace_finding(path, end_day=end_day, day_start=day_start)
     if pace is not None:
         result.append(pace)
     return result
 
 
 def _pace_finding(
-    path: Path, plan: dict[str, object], *, end_day: date, days: int, day_start: time
+    path: Path, *, end_day: date, day_start: time
 ) -> Finding | None:
-    """体重の週変化を計画の目標ペースと比べる。前期間に測定がないときは判定しない。"""
-    target_pace = optional_number(plan, "target_weekly_weight_change")
-    if target_pace is None:
+    """直近7日とその前の7日の実績ペースを、当初目標ペースと比べる。"""
+    progress = goal_progress(path, end_day, day_start=day_start)
+    if progress is None:
         return None
-    current = period_summary(path, end_day, days, day_start=day_start)
-    previous = period_summary(
-        path, end_day - timedelta(days=days), days, day_start=day_start
-    )
-    current_weight = current["average_weight"]
-    previous_weight = previous["average_weight"]
-    if current_weight is None or previous_weight is None:
+    target_pace = progress["initial_target_weekly_weight_change"]
+    actual_pace = progress["actual_weekly_weight_change"]
+    status = progress["status"]
+    if actual_pace is None or status is None:
         return None
-    weekly_change = round((current_weight - previous_weight) * 7 / days, 3)
-    behind = weekly_change > target_pace + 0.1
+    behind = status == "behind"
     return _finding(
         group="goal",
         kind="goal_pace_behind" if behind else "goal_pace_on_track",
         severity="attention" if behind else "info",
-        actual=weekly_change,
+        actual=actual_pace,
         reference=target_pace,
-        reference_basis="計画の目標ペース",
+        reference_basis="当初目標ペース",
         unit="kg/週",
-        period_days=days,
-        sample_days=current["weight_measurements"],
+        period_days=7,
+        sample_days=progress["current_weight_measurements"],
         headroom=None,
         resolution="none",
-        detail={"difference": round(weekly_change - target_pace, 3)},
+        detail={
+            "difference": round(actual_pace - target_pace, 3),
+            "current_required_weekly_weight_change": (
+                progress["current_required_weekly_weight_change"]
+            ),
+            "previous_weight_measurements": progress["previous_weight_measurements"],
+        },
     )
 
 

@@ -27,7 +27,12 @@ from diet_assistant.services.planning import (
     evaluate_goal,
     save_plan,
 )
-from diet_assistant.services.reporting import daily_summary, period_summary, weekly_summary
+from diet_assistant.services.reporting import (
+    daily_summary,
+    goal_progress,
+    period_summary,
+    weekly_summary,
+)
 from diet_assistant.util import now_iso, reporting_date, require_str, with_weekday
 
 
@@ -564,6 +569,75 @@ def test_plan_uses_latest_weight_not_start_weight(db_path: Path) -> None:
             ).fetchone(),
         )
     assert row["basis_weight"] == 88.1, "前提体重をplanに残し、古さを判定できるようにする"
+
+
+def test_recalculated_plan_keeps_initial_pace_and_reports_current_required_pace(
+    db_path: Path,
+) -> None:
+    """再計算しても当初目標ペースは固定し、現在必要ペースは参考値として分離する。"""
+    goal_id = insert(
+        db_path,
+        "goals",
+        {
+            "started_at": "2026-07-21",
+            "target_date": "2026-08-21",
+            "start_weight": 91,
+            "target_weight": 87,
+            "target_type": "weight_loss",
+            "status": "active",
+            "note": None,
+            "created_at": now_iso(),
+        },
+    )
+    _weight(db_path, "2026-07-26T07:00:00+09:00", 88.1)
+
+    plan = save_plan(db_path, goal_id, profile=_PROFILE, today=date(2026, 7, 26))
+
+    assert plan["target_weekly_weight_change"] == -0.903
+    assert plan["initial_target_weekly_weight_change"] == -0.903
+    assert plan["current_required_weekly_weight_change"] == -0.296
+    energy = cast(dict[str, object], plan["energy"])
+    assert energy["calorie_plan_supports_theoretical_pace"] is False
+    assert energy["target_daily_calories"] == 1624, (
+        "現在必要ペースが緩くても、摂取計画を自動的に緩めない"
+    )
+
+
+def test_goal_progress_separates_initial_required_and_actual_paces(db_path: Path) -> None:
+    goal_id = insert(
+        db_path,
+        "goals",
+        {
+            "started_at": "2026-07-01",
+            "target_date": "2026-08-21",
+            "start_weight": 91,
+            "target_weight": 87,
+            "target_type": "weight_loss",
+            "status": "active",
+            "note": None,
+            "created_at": now_iso(),
+        },
+    )
+    _ = save_plan(db_path, goal_id, profile=_PROFILE, today=date(2026, 7, 1))
+    with connect(db_path) as connection:
+        _ = connection.execute(
+            "UPDATE plans SET target_weekly_weight_change = -1.077 "
+            + "WHERE goal_id = ? AND status = 'active'",
+            (goal_id,),
+        )
+    for offset in range(7):
+        _weight(db_path, f"2026-07-{9 + offset:02d}T07:00:00+09:00", 89.0)
+        _weight(db_path, f"2026-07-{16 + offset:02d}T07:00:00+09:00", 88.4)
+
+    progress = goal_progress(db_path, date(2026, 7, 22))
+
+    assert progress is not None
+    assert progress["initial_target_weekly_weight_change"] == -0.549
+    assert progress["current_required_weekly_weight_change"] == -0.327
+    assert progress["actual_weekly_weight_change"] == -0.6
+    assert progress["status"] == "on_track"
+    assert progress["current_weight_measurements"] == 7
+    assert progress["previous_weight_measurements"] == 7
 
 
 def test_plan_falls_back_to_start_weight_without_measurements(db_path: Path) -> None:

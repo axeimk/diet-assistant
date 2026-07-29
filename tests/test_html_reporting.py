@@ -11,7 +11,13 @@ from diet_assistant.services.html_reporting import (
     weekly_trend,
 )
 from diet_assistant.services.nutrition import NutrientComparison
-from diet_assistant.services.reporting import DailySummary, daily_summary, weekly_summary
+from diet_assistant.services.reporting import (
+    DailySummary,
+    GoalProgress,
+    daily_markdown,
+    daily_summary,
+    weekly_summary,
+)
 from diet_assistant.util import now_iso
 
 
@@ -228,6 +234,28 @@ def test_weekly_html_marks_the_pace_against_the_plan(db_path: Path) -> None:
     # findings と同じ +0.1 kg/週 の許容。境界はまだ「遅い」としない。
     assert 'class="status status--good status--check">計画どおり' in pace(-0.4)
     assert 'class="status status--warn status--alert">計画より遅い' in pace(-0.2)
+
+
+def test_daily_reports_show_all_three_paces_and_on_track_status(db_path: Path) -> None:
+    summary = _lunch_summary(db_path, 1600)
+    progress: GoalProgress = {
+        "initial_target_weekly_weight_change": -0.9,
+        "current_required_weekly_weight_change": -0.3,
+        "actual_weekly_weight_change": -1.1,
+        "status": "on_track",
+        "current_weight_measurements": 7,
+        "previous_weight_measurements": 5,
+    }
+
+    markdown = daily_markdown(summary, goal_progress=progress)
+    html = daily_html(summary, None, [], None, [], goal_progress=progress)
+
+    for text in ("当初目標ペース", "現在必要ペース（参考）", "実績ペース（参考）", "順調"):
+        assert text in markdown
+        assert text in html
+    assert "-0.9 kg/週" in markdown
+    assert "-0.3 kg/週" in markdown
+    assert "-1.1 kg/週" in markdown
 
 
 def test_daily_trend_preserves_missing_values_and_requires_three_weights(

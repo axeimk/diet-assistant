@@ -16,7 +16,9 @@ from .nutrition import NutrientComparison
 from .reporting import (
     NUTRIENT_LABELS,
     NUTRIENT_STATUS_LABELS,
+    PACE_TOLERANCE,
     DailySummary,
+    GoalProgress,
     PeriodSummary,
     findings_lines,
     nutrient_reference,
@@ -49,10 +51,6 @@ _GOAL_OUTCOME_BADGES: dict[str, StatusBadge] = {
     "insufficient_data": {"tone": "muted", "mark": "dash", "label": "データ不足"},
 }
 
-# findingsのペース判定と同じ許容。表示と分析で判定がずれないようにする。
-PACE_TOLERANCE = 0.1
-
-
 def nutrient_badge(comparison: NutrientComparison) -> StatusBadge:
     status = comparison["status"]
     label = NUTRIENT_STATUS_LABELS[status]
@@ -81,6 +79,14 @@ def calorie_badge(summary: DailySummary) -> StatusBadge | None:
 def goal_badge(goal_evaluation: dict[str, object] | None) -> StatusBadge | None:
     outcome = goal_evaluation.get("outcome") if goal_evaluation else None
     return _GOAL_OUTCOME_BADGES.get(outcome) if isinstance(outcome, str) else None
+
+
+def goal_progress_badge(progress: GoalProgress | None) -> StatusBadge | None:
+    if progress is None or progress["status"] is None:
+        return None
+    if progress["status"] == "on_track":
+        return {"tone": "good", "mark": "check", "label": "順調"}
+    return {"tone": "warn", "mark": "alert", "label": "遅れ"}
 
 
 def pace_badge(summary: PeriodSummary) -> StatusBadge | None:
@@ -226,6 +232,8 @@ def daily_html(
     findings: Sequence[Finding],
     goal_evaluation: dict[str, object] | None,
     trend: list[DailyTrendPoint],
+    *,
+    goal_progress: GoalProgress | None = None,
 ) -> str:
     return _render(
         "daily.html",
@@ -236,6 +244,7 @@ def daily_html(
         summary=summary,
         feedback=feedback,
         goal_evaluation=goal_evaluation,
+        goal_progress=goal_progress,
         trend=trend,
         finding_lines=findings_lines(findings),
         nutrient_labels=list(NUTRIENT_LABELS.items()),
@@ -243,6 +252,7 @@ def daily_html(
         nutrient_badge=nutrient_badge,
         calorie_badge=calorie_badge(summary),
         goal_badge=goal_badge(goal_evaluation),
+        goal_progress_badge=goal_progress_badge(goal_progress),
     )
 
 
@@ -252,6 +262,7 @@ def weekly_html(
     findings: Sequence[Finding],
     trend: list[WeeklyTrendPoint],
 ) -> str:
+    progress = summary.get("goal_progress")
     return _render(
         "weekly.html",
         title=f"週次レポート {summary['period_start']}〜{summary['period_end']}",
@@ -261,8 +272,10 @@ def weekly_html(
         report_kind="weekly",
         summary=summary,
         feedback=feedback,
+        goal_progress=progress,
         finding_lines=findings_lines(findings),
         pace_badge=pace_badge(summary),
+        goal_progress_badge=goal_progress_badge(progress),
         trend=trend,
     )
 
